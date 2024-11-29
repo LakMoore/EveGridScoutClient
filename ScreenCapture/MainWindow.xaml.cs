@@ -37,6 +37,7 @@ using System.Windows.Interop;
 using Windows.Graphics.Capture;
 using Windows.UI.Composition;
 using Tesseract;
+using System.IO;
 
 namespace WPFCaptureSample
 {
@@ -56,7 +57,8 @@ namespace WPFCaptureSample
         private ObservableCollection<MonitorInfo> monitors;
         private TesseractEngine _tesseract;
         private const string TESSDATA_PATH = @"./tessdata";
-        private bool _isProcessingOcr = false;
+        private bool _isProcessingOcr;
+        private string _lastBitmapHash;
 
         public MainWindow()
         {
@@ -279,11 +281,23 @@ namespace WPFCaptureSample
             sample.StartCapture();
         }
 
+        private string GetBitmapHash(Bitmap bitmap)
+        {
+            using (var ms = new MemoryStream())
+            {
+                bitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Bmp);
+                using (var sha256 = System.Security.Cryptography.SHA256.Create())
+                {
+                    return Convert.ToBase64String(sha256.ComputeHash(ms.ToArray()));
+                }
+            }
+        }
+
         private async void OnFrameCapturedAsync(object sender, Bitmap bitmap)
         {
             if (_tesseract == null) return;
 
-            // Check if we're already processing or if it's too soon for next processing
+            // Check if we're already processing
             if (_isProcessingOcr)
             {
                 bitmap.Dispose();
@@ -295,6 +309,14 @@ namespace WPFCaptureSample
                 _isProcessingOcr = true;
                 using (bitmap)
                 {
+                    // Check if the bitmap has changed
+                    string currentHash = GetBitmapHash(bitmap);
+                    if (currentHash == _lastBitmapHash)
+                    {
+                        return;
+                    }
+                    _lastBitmapHash = currentHash;
+
                     // Run OCR processing on a background thread
                     var text = await Task.Run(() =>
                     {
