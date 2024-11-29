@@ -1,4 +1,4 @@
-﻿//  ---------------------------------------------------------------------------------
+//  ---------------------------------------------------------------------------------
 //  Copyright (c) Microsoft Corporation.  All rights reserved.
 // 
 //  The MIT License (MIT)
@@ -27,15 +27,16 @@ using Composition.WindowsRuntimeHelpers;
 using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Drawing;
 using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
-using Windows.Foundation.Metadata;
 using Windows.Graphics.Capture;
 using Windows.UI.Composition;
+using Tesseract;
 
 namespace WPFCaptureSample
 {
@@ -48,19 +49,32 @@ namespace WPFCaptureSample
         private Compositor compositor;
         private CompositionTarget target;
         private ContainerVisual root;
-
-        private BasicApplication sample;
+        private SpriteVisual visual;
+        private CompositionSurfaceBrush imageBrush;
+        private BasicCapture sample;
         private ObservableCollection<Process> processes;
         private ObservableCollection<MonitorInfo> monitors;
+        private TesseractEngine _tesseract;
+        private const string TESSDATA_PATH = @"./tessdata";
+        private bool _isProcessingOcr = false;
 
         public MainWindow()
         {
             InitializeComponent();
+            InitializeTesseract();
+        }
 
-#if DEBUG
-            // Force graphicscapture.dll to load.
-            var picker = new GraphicsCapturePicker();
-#endif
+        private void InitializeTesseract()
+        {
+            try
+            {
+                _tesseract = new TesseractEngine(TESSDATA_PATH, "eng", EngineMode.Default);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error initializing Tesseract OCR: {ex.Message}\nMake sure tessdata folder exists in the application directory.",
+                    "OCR Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private async void PickerButton_Click(object sender, RoutedEventArgs e)
@@ -154,95 +168,154 @@ namespace WPFCaptureSample
 
         private void InitComposition(float controlsWidth)
         {
-            // Create the compositor.
             compositor = new Compositor();
-
-            // Create a target for the window.
             target = compositor.CreateDesktopWindowTarget(hwnd, true);
 
-            // Attach the root visual.
             root = compositor.CreateContainerVisual();
             root.RelativeSizeAdjustment = Vector2.One;
             root.Size = new Vector2(-controlsWidth, 0);
             root.Offset = new Vector3(controlsWidth, 0, 0);
             target.Root = root;
 
-            // Setup the rest of the sample application.
-            sample = new BasicApplication(compositor);
-            root.Children.InsertAtTop(sample.Visual);
+            visual = compositor.CreateSpriteVisual();
+            visual.RelativeSizeAdjustment = Vector2.One;
+
+            imageBrush = compositor.CreateSurfaceBrush();
+            imageBrush.Stretch = CompositionStretch.Uniform;
+            visual.Brush = imageBrush;
+
+            root.Children.InsertAtTop(visual);
         }
 
         private void InitWindowList()
         {
-            if (ApiInformation.IsApiContractPresent(typeof(Windows.Foundation.UniversalApiContract).FullName, 8))
+            processes = new ObservableCollection<Process>();
+            WindowComboBox.ItemsSource = processes;
+
+            var currentProcess = Process.GetCurrentProcess();
+            var processesList = Process.GetProcesses()
+                .Where(p => p.MainWindowHandle != IntPtr.Zero && p.Id != currentProcess.Id)
+                .OrderBy(p => p.MainWindowTitle);
+            foreach (var process in processesList)
             {
-                var processesWithWindows = from p in Process.GetProcesses()
-                                           where !string.IsNullOrWhiteSpace(p.MainWindowTitle) && WindowEnumerationHelper.IsWindowValidForCapture(p.MainWindowHandle)
-                                           select p;
-                processes = new ObservableCollection<Process>(processesWithWindows);
-                WindowComboBox.ItemsSource = processes;
-            }
-            else
-            {
-                WindowComboBox.IsEnabled = false;
+                processes.Add(process);
             }
         }
 
         private void InitMonitorList()
         {
-            if (ApiInformation.IsApiContractPresent(typeof(Windows.Foundation.UniversalApiContract).FullName, 8))
+            monitors = new ObservableCollection<MonitorInfo>();
+            MonitorComboBox.ItemsSource = monitors;
+
+            var allMonitors = MonitorEnumerationHelper.GetMonitors();
+            foreach (var monitor in allMonitors)
             {
-                monitors = new ObservableCollection<MonitorInfo>(MonitorEnumerationHelper.GetMonitors());
-                MonitorComboBox.ItemsSource = monitors;
-            }
-            else
-            {
-                MonitorComboBox.IsEnabled = false;
-                PrimaryMonitorButton.IsEnabled = false;
+                monitors.Add(monitor);
             }
         }
 
         private async Task StartPickerCaptureAsync()
         {
             var picker = new GraphicsCapturePicker();
-            picker.SetWindow(hwnd);
-            GraphicsCaptureItem item = await picker.PickSingleItemAsync();
-
+            picker.SetWindow(new WindowInteropHelper(this).Handle);
+            var item = await picker.PickSingleItemAsync();
             if (item != null)
             {
-                sample.StartCaptureFromItem(item);
+                StartCaptureFromItem(item);
             }
         }
 
         private void StartHwndCapture(IntPtr hwnd)
         {
-            GraphicsCaptureItem item = CaptureHelper.CreateItemForWindow(hwnd);
+            var item = CaptureHelper.CreateItemForWindow(hwnd);
             if (item != null)
             {
-                sample.StartCaptureFromItem(item);
+                StartCaptureFromItem(item);
             }
         }
 
         private void StartHmonCapture(IntPtr hmon)
         {
-            GraphicsCaptureItem item = CaptureHelper.CreateItemForMonitor(hmon);
+            var item = CaptureHelper.CreateItemForMonitor(hmon);
             if (item != null)
             {
-                sample.StartCaptureFromItem(item);
+                StartCaptureFromItem(item);
+            }
+        }
+
+        private void StopCapture()
+        {
+            if (sample != null)
+            {
+                sample.FrameCaptured -= OnFrameCaptured;
+                sample.StopCapture();
+                sample.Dispose();
+                sample = null;
             }
         }
 
         private void StartPrimaryMonitorCapture()
         {
-            MonitorInfo monitor = (from m in MonitorEnumerationHelper.GetMonitors()
-                           where m.IsPrimary
-                           select m).First();
+            var monitor = MonitorEnumerationHelper.GetMonitors().First();
             StartHmonCapture(monitor.Hmon);
         }
 
-        private void StopCapture()
+        private void StartCaptureFromItem(GraphicsCaptureItem item)
         {
-            sample.StopCapture();
+            if (item == null)
+            {
+                return;
+            }
+
+            StopCapture();
+
+            var device = Direct3D11Helper.CreateDevice();
+            sample = new BasicCapture(device, item);
+            sample.FrameCaptured += OnFrameCaptured;
+
+            var surface = sample.CreateSurface(compositor);
+            imageBrush.Surface = surface;
+
+            sample.StartCapture();
+        }
+
+        private void OnFrameCaptured(object sender, Bitmap bitmap)
+        {
+            if (_tesseract == null) return;
+
+            // Check if we're already processing or if it's too soon for next processing
+            if (_isProcessingOcr)
+            {
+                bitmap.Dispose();
+                return;
+            }
+
+            try
+            {
+                _isProcessingOcr = true;
+                using (bitmap)
+                using (var page = _tesseract.Process(bitmap))
+                {
+                    var text = page.GetText();
+                    Console.WriteLine("NEWTEXT");
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        OcrResultsTextBox.Text = text;
+                        OcrResultsTextBox.ScrollToEnd();
+                    }));
+                }
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    OcrResultsTextBox.AppendText($"OCR Error: {ex.Message}{Environment.NewLine}");
+                }));
+            }
+            finally
+            {
+                _isProcessingOcr = false;
+            }
         }
     }
 }
