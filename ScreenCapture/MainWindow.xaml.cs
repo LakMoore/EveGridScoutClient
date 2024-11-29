@@ -294,9 +294,16 @@ namespace WPFCaptureSample
             {
                 _isProcessingOcr = true;
                 using (bitmap)
-                using (var page = _tesseract.Process(bitmap))
                 {
-                    var text = page.GetText();
+                    // Run OCR processing on a background thread
+                    var text = await Task.Run(() =>
+                    {
+                        using (var page = _tesseract.Process(bitmap))
+                        {
+                            return page.GetText();
+                        }
+                    });
+
                     Console.WriteLine("NEWTEXT");
                     await Dispatcher.BeginInvoke(new Action(() =>
                     {
@@ -314,7 +321,6 @@ namespace WPFCaptureSample
             }
             finally
             {
-                await Task.Delay(100);
                 _isProcessingOcr = false;
             }
         }
