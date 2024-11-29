@@ -247,7 +247,7 @@ namespace WPFCaptureSample
         {
             if (sample != null)
             {
-                sample.FrameCaptured -= OnFrameCaptured;
+                sample.FrameCaptured -= OnFrameCapturedAsync;
                 sample.StopCapture();
                 sample.Dispose();
                 sample = null;
@@ -271,7 +271,7 @@ namespace WPFCaptureSample
 
             var device = Direct3D11Helper.CreateDevice();
             sample = new BasicCapture(device, item);
-            sample.FrameCaptured += OnFrameCaptured;
+            sample.FrameCaptured += OnFrameCapturedAsync;
 
             var surface = sample.CreateSurface(compositor);
             imageBrush.Surface = surface;
@@ -279,7 +279,7 @@ namespace WPFCaptureSample
             sample.StartCapture();
         }
 
-        private void OnFrameCaptured(object sender, Bitmap bitmap)
+        private async void OnFrameCapturedAsync(object sender, Bitmap bitmap)
         {
             if (_tesseract == null) return;
 
@@ -298,7 +298,7 @@ namespace WPFCaptureSample
                 {
                     var text = page.GetText();
                     Console.WriteLine("NEWTEXT");
-                    Dispatcher.BeginInvoke(new Action(() =>
+                    await Dispatcher.BeginInvoke(new Action(() =>
                     {
                         OcrResultsTextBox.Text = text;
                         OcrResultsTextBox.ScrollToEnd();
@@ -307,13 +307,14 @@ namespace WPFCaptureSample
             }
             catch (Exception ex)
             {
-                Dispatcher.BeginInvoke(new Action(() =>
+                await Dispatcher.BeginInvoke(new Action(() =>
                 {
                     OcrResultsTextBox.AppendText($"OCR Error: {ex.Message}{Environment.NewLine}");
                 }));
             }
             finally
             {
+                await Task.Delay(100);
                 _isProcessingOcr = false;
             }
         }

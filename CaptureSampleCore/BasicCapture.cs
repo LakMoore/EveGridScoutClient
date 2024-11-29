@@ -21,8 +21,6 @@ namespace CaptureSampleCore
         private IDirect3DDevice device;
         private SharpDX.Direct3D11.Device d3dDevice;
         private SharpDX.DXGI.SwapChain1 swapChain;
-        private DateTime _lastFrameTime = DateTime.MinValue;
-        private const int MIN_FRAME_INTERVAL_MS = 100; // Minimum time between frames
 
         public event EventHandler<Bitmap> FrameCaptured;
 
@@ -91,12 +89,6 @@ namespace CaptureSampleCore
 
         private void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
         {
-            // Check if it's too soon for next frame
-            if ((DateTime.Now - _lastFrameTime).TotalMilliseconds < MIN_FRAME_INTERVAL_MS)
-            {
-                return;
-            }
-
             var newSize = false;
 
             using (var frame = sender.TryGetNextFrame())
@@ -167,7 +159,6 @@ namespace CaptureSampleCore
                                     d3dDevice.ImmediateContext.UnmapSubresource(tempTexture, 0);
 
                                     FrameCaptured?.Invoke(this, bmp);
-                                    _lastFrameTime = DateTime.Now;
                                 }
                                 catch
                                 {
