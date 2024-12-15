@@ -21,7 +21,7 @@
 //  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 //  THE SOFTWARE.
 -->
-    
+
 <Window x:Class="WPFCaptureSample.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -72,7 +72,12 @@
         </Grid>
 
         <Grid Grid.Column="1" x:Name="CaptureGrid">
-            <Rectangle x:Name="CaptureRectangle" Fill="WhiteSmoke" />
+            <Grid Grid.Column="1" x:Name="CaptureGridInner">
+                <Canvas x:Name="myCanvas" />
+                <Rectangle x:Name="captureRectangle" StrokeThickness="2" Stroke="Red" />
+                <Rectangle x:Name="dragTopLeft" StrokeThickness="2" Stroke="Red" Width="20" Height="20" HorizontalAlignment="Left" VerticalAlignment="Top" Fill="#59FF0000" Cursor="Hand" />
+                <Rectangle x:Name="dragBottomRight" StrokeThickness="2" Stroke="Red"  Width="20" Height="20" HorizontalAlignment="Right" VerticalAlignment="Bottom" Fill="#59FF0000" Cursor="Hand" />
+            </Grid>
         </Grid>
     </Grid>
 </Window>

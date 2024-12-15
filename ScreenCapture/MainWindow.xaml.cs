@@ -33,6 +33,7 @@ using System.Numerics;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using Windows.Graphics.Capture;
 using Windows.UI.Composition;
@@ -48,8 +49,8 @@ namespace WPFCaptureSample
     {
         private IntPtr hwnd;
         private Compositor compositor;
-        private CompositionTarget target;
-        private ContainerVisual root;
+        private Windows.UI.Composition.CompositionTarget target;
+        private Windows.UI.Composition.ContainerVisual root;
         private SpriteVisual visual;
         private CompositionSurfaceBrush imageBrush;
         private BasicCapture sample;
@@ -59,11 +60,14 @@ namespace WPFCaptureSample
         private const string TESSDATA_PATH = @"./tessdata";
         private bool _isProcessingOcr;
         private string _lastBitmapHash;
+        private double lastMouseX;
+        private double lastMouseY;
 
         public MainWindow()
         {
             InitializeComponent();
             InitializeTesseract();
+            InitializeCaptureRectangle();
         }
 
         private void InitializeTesseract()
@@ -76,6 +80,84 @@ namespace WPFCaptureSample
             {
                 MessageBox.Show($"Error initializing Tesseract OCR: {ex.Message}\nMake sure tessdata folder exists in the application directory.",
                     "OCR Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void InitializeCaptureRectangle()
+        {
+
+            CaptureGridInner.Width = CaptureGrid.Width;
+            CaptureGridInner.Height = CaptureGrid.Height;
+
+            // Mouse events for resizing
+            dragTopLeft.MouseMove += DragTopLeft_MouseMove;
+            dragTopLeft.MouseLeftButtonDown += DragHandle_MouseLeftButtonDown;
+            dragTopLeft.MouseLeftButtonUp += DragHandle_MouseLeftButtonUp;
+            dragBottomRight.MouseMove += DragBottomRight_MouseMove;
+            dragBottomRight.MouseLeftButtonDown += DragHandle_MouseLeftButtonDown;
+            dragBottomRight.MouseLeftButtonUp += DragHandle_MouseLeftButtonUp;
+        }
+
+        private void DragHandle_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // Logic to initiate resizing
+            if (sender is System.Windows.Shapes.Rectangle rectangle)
+            {
+                rectangle.CaptureMouse();
+                lastMouseX = e.GetPosition(myCanvas).X;
+                lastMouseY = e.GetPosition(myCanvas).Y;
+            }
+        }
+
+        private void DragTopLeft_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (sender is System.Windows.Shapes.Rectangle rectangle && rectangle.IsMouseCaptured)
+            {
+                double mouseX = e.GetPosition(myCanvas).X;
+                double mouseY = e.GetPosition(myCanvas).Y;
+
+                double deltaX = mouseX - lastMouseX;
+                double deltaY = mouseY - lastMouseY;
+
+                CaptureGridInner.Margin = new Thickness(
+                    Math.Max(0, CaptureGridInner.Margin.Left + deltaX), 
+                    Math.Max(0, CaptureGridInner.Margin.Top + deltaY), 
+                    CaptureGridInner.Margin.Right, 
+                    CaptureGridInner.Margin.Bottom
+                );
+            }
+        }
+
+        private void DragHandle_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            // Release mouse capture
+            if (sender is System.Windows.Shapes.Rectangle rectangle)
+            {
+                rectangle.ReleaseMouseCapture();
+            }
+
+        }
+
+        private void DragBottomRight_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (sender is System.Windows.Shapes.Rectangle rectangle && rectangle.IsMouseCaptured)
+            {
+
+                double mouseX = e.GetPosition(myCanvas).X;
+                double mouseY = e.GetPosition(myCanvas).Y;
+
+                double deltaX = lastMouseX - mouseX;
+                double deltaY = lastMouseY - mouseY;
+
+                CaptureGridInner.Margin = new Thickness(
+                    CaptureGridInner.Margin.Left,
+                    CaptureGridInner.Margin.Top,
+                    Math.Max(0, CaptureGridInner.Margin.Right + deltaX),
+                    Math.Max(0, CaptureGridInner.Margin.Bottom + deltaY)
+                );
+
+                lastMouseX = mouseX;
+                lastMouseY = mouseY;
             }
         }
 
@@ -317,10 +399,13 @@ namespace WPFCaptureSample
                     }
                     _lastBitmapHash = currentHash;
 
+                    // Get rectangle properties for OCR
+                    var rect = GetRectangleForOCR(bitmap);
+
                     // Run OCR processing on a background thread
                     var text = await Task.Run(() =>
                     {
-                        using (var page = _tesseract.Process(bitmap))
+                        using (var page = _tesseract.Process(bitmap, rect))
                         {
                             return page.GetText();
                         }
@@ -345,6 +430,24 @@ namespace WPFCaptureSample
             {
                 _isProcessingOcr = false;
             }
+        }
+
+        public Tesseract.Rect GetRectangleForOCR(Bitmap bitmap)
+        {
+            double fullWidth = CaptureGrid.ActualWidth;
+            double fullHeight = CaptureGrid.ActualHeight;
+
+            double x = CaptureGridInner.Margin.Left;
+            double y = CaptureGridInner.Margin.Top;
+            double width = CaptureGridInner.ActualWidth;
+            double height = CaptureGridInner.ActualHeight;
+
+            return new Tesseract.Rect(
+                (int)(bitmap.Width * x / fullWidth), 
+                (int)(bitmap.Height * y / fullHeight), 
+                (int)(bitmap.Width * width / fullWidth), 
+                (int)(bitmap.Height * height / fullHeight)
+            );
         }
     }
 }
