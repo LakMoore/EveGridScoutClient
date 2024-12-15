@@ -27,7 +27,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:WPFCaptureSample"
+        xmlns:local="clr-namespace:WPFCaptureSample" xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
         mc:Ignorable="d"
         Title="WPF Capture Sample" Height="450" Width="800"
         Loaded="Window_Loaded">
@@ -39,6 +39,7 @@
 
         <Grid x:Name="ControlsGrid" Grid.Column="0">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto" />
@@ -52,34 +53,43 @@
                         </DataTemplate>
                     </ComboBox.ItemTemplate>
                 </ComboBox>
-                <Button x:Name="PrimaryMonitorButton" Content="Use Primary Monitor" Click="PrimaryMonitorButton_Click" Margin="10" />
-                <ComboBox x:Name="MonitorComboBox" Margin="10" SelectionChanged="MonitorComboBox_SelectionChanged">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding DeviceName}" />
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
+            </StackPanel>
+            <StackPanel Grid.Row="1" Margin="10,10,10,10">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <xctk:IntegerUpDown x:Name="TopTextBox" Margin="5" Width="50" Text="{Binding Top, UpdateSourceTrigger=PropertyChanged}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <xctk:IntegerUpDown x:Name="LeftTextBox" Margin="5" Width="50" Text="{Binding Left, UpdateSourceTrigger=PropertyChanged}"/>
+                    <Image Source="pack://application:,,,/GridScout;component/Images/arrow.png" 
+           Width="24" Height="24" 
+           Margin="5" 
+           VerticalAlignment="Center" />
+                    <xctk:IntegerUpDown x:Name="BottomTextBox" Margin="5" Width="50" Text="{Binding Bottom, UpdateSourceTrigger=PropertyChanged}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <xctk:IntegerUpDown x:Name="RightTextBox" Margin="5" Width="50" Text="{Binding Right, UpdateSourceTrigger=PropertyChanged}"/>
+                </StackPanel>
+
             </StackPanel>
             <TextBox x:Name="OcrResultsTextBox" 
-                     Grid.Row="1" 
+                     Grid.Row="2" 
                      Margin="10"
                      TextWrapping="Wrap"
                      AcceptsReturn="True"
                      VerticalScrollBarVisibility="Auto"
                      IsReadOnly="True"/>
-            <Button x:Name="StopButton" Grid.Row="2" Content="Stop Capturing" Click="StopButton_Click" Margin="10" />
+            <Button x:Name="StopButton" Grid.Row="3" Content="Stop Capturing" Click="StopButton_Click" Margin="10" />
         </Grid>
 
-        <Grid Grid.Column="1" x:Name="CaptureGrid">
+        <Grid Grid.Column="1" x:Name="CaptureGrid" ScrollViewer.VerticalScrollBarVisibility="Disabled">
             <Canvas x:Name="myCanvas">
-                <Image x:Name="CapturedImage" ScrollViewer.VerticalScrollBarVisibility="Disabled" Width="{Binding ActualWidth, ElementName=myCanvas, Mode=OneWay}" Height="{Binding ActualHeight, ElementName=myCanvas, Mode=OneWay}" />
+                <Image x:Name="CapturedImage" Width="{Binding ActualWidth, ElementName=myCanvas, Mode=OneWay}" Height="{Binding ActualHeight, ElementName=myCanvas, Mode=OneWay}" SizeChanged="CapturedImage_SizeChanged" />
+                <Grid x:Name="CaptureGridInner" Width="352" Height="262">
+                    <Rectangle x:Name="captureRectangle" StrokeThickness="2" Stroke="Red" />
+                    <Rectangle x:Name="dragTopLeft" StrokeThickness="2" Stroke="Red" Width="20" Height="20" HorizontalAlignment="Left" VerticalAlignment="Top" Fill="#59FF0000" Cursor="Hand" />
+                    <Rectangle x:Name="dragBottomRight" StrokeThickness="2" Stroke="Red"  Width="20" Height="20" HorizontalAlignment="Right" VerticalAlignment="Bottom" Fill="#59FF0000" Cursor="Hand" />
+                </Grid>
             </Canvas>
-            <Grid Grid.Column="1" x:Name="CaptureGridInner">
-                <Rectangle x:Name="captureRectangle" StrokeThickness="2" Stroke="Red" />
-                <Rectangle x:Name="dragTopLeft" StrokeThickness="2" Stroke="Red" Width="20" Height="20" HorizontalAlignment="Left" VerticalAlignment="Top" Fill="#59FF0000" Cursor="Hand" />
-                <Rectangle x:Name="dragBottomRight" StrokeThickness="2" Stroke="Red"  Width="20" Height="20" HorizontalAlignment="Right" VerticalAlignment="Bottom" Fill="#59FF0000" Cursor="Hand" />
-            </Grid>
         </Grid>
     </Grid>
 </Window>
