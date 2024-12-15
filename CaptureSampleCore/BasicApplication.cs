@@ -87,9 +87,6 @@ namespace CaptureSampleCore
             StopCapture();
             capture = new BasicCapture(device, item);
 
-            var surface = capture.CreateSurface(compositor);
-            brush.Surface = surface;
-
             capture.StartCapture();
         }
 

@@ -29,16 +29,15 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
-using System.Numerics;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using Windows.Graphics.Capture;
-using Windows.UI.Composition;
 using Tesseract;
 using System.IO;
+using System.Windows.Media.Imaging;
 
 namespace WPFCaptureSample
 {
@@ -48,11 +47,6 @@ namespace WPFCaptureSample
     public partial class MainWindow : Window
     {
         private IntPtr hwnd;
-        private Compositor compositor;
-        private Windows.UI.Composition.CompositionTarget target;
-        private Windows.UI.Composition.ContainerVisual root;
-        private SpriteVisual visual;
-        private CompositionSurfaceBrush imageBrush;
         private BasicCapture sample;
         private ObservableCollection<Process> processes;
         private ObservableCollection<MonitorInfo> monitors;
@@ -125,6 +119,8 @@ namespace WPFCaptureSample
                     CaptureGridInner.Margin.Right, 
                     CaptureGridInner.Margin.Bottom
                 );
+                lastMouseX = mouseX;
+                lastMouseY = mouseY;
             }
         }
 
@@ -192,7 +188,6 @@ namespace WPFCaptureSample
             }
             var controlsWidth = (float)(ControlsGrid.ActualWidth * dpiX);
 
-            InitComposition(controlsWidth);
             InitWindowList();
             InitMonitorList();
         }
@@ -248,27 +243,6 @@ namespace WPFCaptureSample
                     comboBox.SelectedIndex = -1;
                 }
             }
-        }
-
-        private void InitComposition(float controlsWidth)
-        {
-            compositor = new Compositor();
-            target = compositor.CreateDesktopWindowTarget(hwnd, true);
-
-            root = compositor.CreateContainerVisual();
-            root.RelativeSizeAdjustment = Vector2.One;
-            root.Size = new Vector2(-controlsWidth, 0);
-            root.Offset = new Vector3(controlsWidth, 0, 0);
-            target.Root = root;
-
-            visual = compositor.CreateSpriteVisual();
-            visual.RelativeSizeAdjustment = Vector2.One;
-
-            imageBrush = compositor.CreateSurfaceBrush();
-            imageBrush.Stretch = CompositionStretch.Uniform;
-            visual.Brush = imageBrush;
-
-            root.Children.InsertAtTop(visual);
         }
 
         private void InitWindowList()
@@ -357,8 +331,8 @@ namespace WPFCaptureSample
             sample = new BasicCapture(device, item);
             sample.FrameCaptured += OnFrameCapturedAsync;
 
-            var surface = sample.CreateSurface(compositor);
-            imageBrush.Surface = surface;
+            //var surface = sample.CreateSurface(compositor);
+            //imageBrush.Surface = surface;
 
             sample.StartCapture();
         }
@@ -377,6 +351,21 @@ namespace WPFCaptureSample
 
         private async void OnFrameCapturedAsync(object sender, Bitmap bitmap)
         {
+            // Convert Bitmap to BitmapImage
+            var bitmapImage = new BitmapImage();
+            using (var memoryStream = new MemoryStream())
+            {
+                bitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Bmp);
+                memoryStream.Seek(0, SeekOrigin.Begin);
+                
+                bitmapImage.BeginInit();
+                bitmapImage.StreamSource = memoryStream;
+                bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
+                bitmapImage.EndInit();
+                bitmapImage.Freeze(); // Optional: Freeze to make it cross-thread accessible
+            }
+            CapturedImage.Source = bitmapImage;
+
             if (_tesseract == null) return;
 
             // Check if we're already processing

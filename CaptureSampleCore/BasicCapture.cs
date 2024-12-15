@@ -82,11 +82,6 @@ namespace CaptureSampleCore
             session = null;
         }
 
-        public ICompositionSurface CreateSurface(Compositor compositor)
-        {
-            return compositor.CreateCompositionSurfaceForSwapChain(swapChain);
-        }
-
         private void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
         {
             var newSize = false;
@@ -174,8 +169,6 @@ namespace CaptureSampleCore
                     }
                 }
             }
-
-            swapChain.Present(0, SharpDX.DXGI.PresentFlags.None);
 
             if (newSize)
             {

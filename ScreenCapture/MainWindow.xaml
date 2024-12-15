@@ -72,8 +72,10 @@
         </Grid>
 
         <Grid Grid.Column="1" x:Name="CaptureGrid">
+            <Canvas x:Name="myCanvas">
+                <Image x:Name="CapturedImage" ScrollViewer.VerticalScrollBarVisibility="Disabled" Width="{Binding ActualWidth, ElementName=myCanvas, Mode=OneWay}" Height="{Binding ActualHeight, ElementName=myCanvas, Mode=OneWay}" />
+            </Canvas>
             <Grid Grid.Column="1" x:Name="CaptureGridInner">
-                <Canvas x:Name="myCanvas" />
                 <Rectangle x:Name="captureRectangle" StrokeThickness="2" Stroke="Red" />
                 <Rectangle x:Name="dragTopLeft" StrokeThickness="2" Stroke="Red" Width="20" Height="20" HorizontalAlignment="Left" VerticalAlignment="Top" Fill="#59FF0000" Cursor="Hand" />
                 <Rectangle x:Name="dragBottomRight" StrokeThickness="2" Stroke="Red"  Width="20" Height="20" HorizontalAlignment="Right" VerticalAlignment="Bottom" Fill="#59FF0000" Cursor="Hand" />
