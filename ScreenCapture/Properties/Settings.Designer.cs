@@ -25,49 +25,13 @@ namespace GridScout.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0")]
-        public int Top {
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string CaptureGrids {
             get {
-                return ((int)(this["Top"]));
+                return ((string)(this["CaptureGrids"]));
             }
             set {
-                this["Top"] = value;
-            }
-        }
-        
-        [global::System.Configuration.UserScopedSettingAttribute()]
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0")]
-        public int Left {
-            get {
-                return ((int)(this["Left"]));
-            }
-            set {
-                this["Left"] = value;
-            }
-        }
-        
-        [global::System.Configuration.UserScopedSettingAttribute()]
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0")]
-        public int Bottom {
-            get {
-                return ((int)(this["Bottom"]));
-            }
-            set {
-                this["Bottom"] = value;
-            }
-        }
-        
-        [global::System.Configuration.UserScopedSettingAttribute()]
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0")]
-        public int Right {
-            get {
-                return ((int)(this["Right"]));
-            }
-            set {
-                this["Right"] = value;
+                this["CaptureGrids"] = value;
             }
         }
     }

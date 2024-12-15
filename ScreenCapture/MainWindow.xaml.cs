@@ -38,8 +38,10 @@ using Windows.Graphics.Capture;
 using Tesseract;
 using System.IO;
 using System.Windows.Media.Imaging;
+using System.Collections.Generic;
+using System.Xml.Serialization;
 
-namespace WPFCaptureSample
+namespace GridScout
 {
     /// <summary>
     /// Interaction logic for MainWindow.xaml
@@ -55,6 +57,8 @@ namespace WPFCaptureSample
         private string _lastBitmapHash;
         private double lastMouseX;
         private double lastMouseY;
+        private string itemName  = "";
+        private Dictionary<string, Thickness> captureGrids = new Dictionary<string, Thickness>();
 
         public MainWindow()
         {
@@ -63,17 +67,24 @@ namespace WPFCaptureSample
             InitializeCaptureRectangle();
 
             // Load persisted values
-            TopTextBox.Value = GridScout.Properties.Settings.Default.Top;
-            LeftTextBox.Value = GridScout.Properties.Settings.Default.Left;
-            BottomTextBox.Value = GridScout.Properties.Settings.Default.Bottom;
-            RightTextBox.Value = GridScout.Properties.Settings.Default.Right;
+            if (Properties.Settings.Default.CaptureGrids.Length > 0)
+            {
+                captureGrids = LoadDictionaryFromString(Properties.Settings.Default.CaptureGrids);
+            }
         }
 
         private void InitializeTesseract()
         {
             try
             {
-                _tesseract = new TesseractEngine(TESSDATA_PATH, "eng", EngineMode.Default);
+                //tessedit_write_images
+                var config = new Dictionary<string, object>();
+                config.Add("tessedit_write_images", true);
+                //config.Add("load_system_dawg", false);
+                //config.Add("load_freq_dawg", false);
+
+                _tesseract = new TesseractEngine(TESSDATA_PATH, "eng", EngineMode.LstmOnly, null, config, false);
+
             }
             catch (Exception ex)
             {
@@ -272,11 +283,19 @@ namespace WPFCaptureSample
             var device = Direct3D11Helper.CreateDevice();
             sample = new BasicCapture(device, item);
             sample.FrameCaptured += OnFrameCapturedAsync;
-
-            //var surface = sample.CreateSurface(compositor);
-            //imageBrush.Surface = surface;
-
             sample.StartCapture();
+
+            itemName = item.DisplayName;
+
+            // Fetch the rect from captureGrids using the item title
+            if (captureGrids.TryGetValue(item.DisplayName, out var rect))
+            {
+                TopTextBox.Value = (int)rect.Top;
+                LeftTextBox.Value = (int)rect.Left;
+                RightTextBox.Value = (int)rect.Right;
+                BottomTextBox.Value = (int)rect.Bottom;
+            }
+
         }
 
         private Task<string> GetBitmapHash(Bitmap bitmap)
@@ -311,23 +330,40 @@ namespace WPFCaptureSample
             {
                 _isProcessingOcr = true;
 
-                CapturedImage.Source = await Task.Run(() =>
+                float scale = 5f;
+                int valueOne = int.Parse(ValueOne.Text);
+                if (valueOne == 0) valueOne = 2;
+                float valueTwo = float.Parse(ValueTwo.Text);
+                if (float.IsNaN(valueTwo)) valueTwo = 0.1f;
+
+                (var bitmapImage, var pix) = await Task.Run(() =>
                 {
                     // Convert Bitmap to BitmapImage
-                    var bitmapImage = new BitmapImage();
+                    var tempBitmap = new BitmapImage();
+                    Pix tempPix;
                     using (var memoryStream = new MemoryStream())
                     {
                         bitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Bmp);
                         memoryStream.Seek(0, SeekOrigin.Begin);
 
-                        bitmapImage.BeginInit();
-                        bitmapImage.StreamSource = memoryStream;
-                        bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
-                        bitmapImage.EndInit();
-                        bitmapImage.Freeze(); // Optional: Freeze to make it cross-thread accessible
+                        tempBitmap.BeginInit();
+                        tempBitmap.StreamSource = memoryStream;
+                        tempBitmap.CacheOption = BitmapCacheOption.OnLoad;
+                        tempBitmap.EndInit();
+                        tempBitmap.Freeze(); // Optional: Freeze to make it cross-thread accessible
+
+                        memoryStream.Seek(0, SeekOrigin.Begin);
+                        tempPix = Pix.LoadFromMemory(memoryStream.ToArray());
+                        tempPix = tempPix.Scale(scale, scale);
+                        tempPix = tempPix.ConvertRGBToGray();
+                        tempPix = tempPix.Invert();   // This is essential
+                        tempPix = tempPix.BinarizeSauvola(8, 0.19f, false);  //8, 0.19f, false works with scale = 5f
+                        //tempPix = tempPix.BinarizeSauvola(valueOne, valueTwo, false);  //8, 0.19f, false works
                     }
-                    return bitmapImage;
+                    return (tempBitmap, tempPix);
                 });
+
+                CapturedImage.Source = bitmapImage;
 
                 using (bitmap)
                 {
@@ -339,13 +375,16 @@ namespace WPFCaptureSample
                     }
                     _lastBitmapHash = currentHash;
 
-                    // Get rectangle properties for OCR
-                    var rect = GetRectangleForOCR(bitmap);
+                    var rect = GetRectangleForOCR(pix, scale);
 
                     // Run OCR processing on a background thread
                     var text = await Task.Run(() =>
                     {
-                        using (var page = _tesseract.Process(bitmap, rect))
+                        using (var page = _tesseract.Process(
+                            pix, 
+                            rect, 
+                            PageSegMode.SingleBlock
+                        ))
                         {
                             return page.GetText();
                         }
@@ -371,13 +410,13 @@ namespace WPFCaptureSample
             }
         }
 
-        public Tesseract.Rect GetRectangleForOCR(Bitmap bitmap)
+        public Tesseract.Rect GetRectangleForOCR(Pix pix, float scale)
         {
             return new Tesseract.Rect(
-                (int)LeftTextBox.Value, 
-                (int)TopTextBox.Value, 
-                bitmap.Width - (int)RightTextBox.Value - (int)LeftTextBox.Value, 
-                bitmap.Height - (int)TopTextBox.Value - (int)BottomTextBox.Value
+                (int)(LeftTextBox.Value * scale), 
+                (int)(TopTextBox.Value * scale), 
+                (int)(pix.Width - scale * RightTextBox.Value - scale * LeftTextBox.Value), 
+                (int)(pix.Height - scale * TopTextBox.Value - scale * BottomTextBox.Value)
             );
         }
 
@@ -393,12 +432,29 @@ namespace WPFCaptureSample
             {
                 ReDrawCaptureRectangle();
 
-                // Save the current values to settings
-                GridScout.Properties.Settings.Default.Top = (int)TopTextBox.Value;
-                GridScout.Properties.Settings.Default.Left = (int)LeftTextBox.Value;
-                GridScout.Properties.Settings.Default.Bottom = (int)BottomTextBox.Value;
-                GridScout.Properties.Settings.Default.Right = (int)RightTextBox.Value;
-                GridScout.Properties.Settings.Default.Save(); // Persist the changes
+                // Save the current values to captupeGrids
+                if (!captureGrids.ContainsKey(itemName))
+                {
+                    captureGrids.Add(itemName, new Thickness(
+                        (int)LeftTextBox.Value,
+                        (int)TopTextBox.Value,
+                        (int)RightTextBox.Value,
+                        (int)BottomTextBox.Value
+                    ));
+                }
+                else
+                {
+                    captureGrids[itemName] = new Thickness(
+                        (int)LeftTextBox.Value,
+                        (int)TopTextBox.Value,
+                        (int)RightTextBox.Value,
+                        (int)BottomTextBox.Value
+                    );
+                }
+
+                // Save the captureGrids dictionary to a string
+                Properties.Settings.Default.CaptureGrids = SaveDictionaryToXml(captureGrids);
+                Properties.Settings.Default.Save(); // Persist the changes
 
             }
         }
@@ -413,13 +469,13 @@ namespace WPFCaptureSample
                 double w = CapturedImage.ActualWidth;
                 double h = CapturedImage.ActualHeight;
 
-                double left = (double)(CaptureGrid.ActualWidth * LeftTextBox.Value / imageW);
-                double top = (double)(CaptureGrid.ActualHeight * TopTextBox.Value / imageH);
-                double right = (double)(CaptureGrid.ActualWidth * RightTextBox.Value / imageW);
-                double bottom = (double)(CaptureGrid.ActualHeight * BottomTextBox.Value / imageH);
+                double left = (double)(w * LeftTextBox.Value / imageW);
+                double top = (double)(h * TopTextBox.Value / imageH);
+                double right = (double)(w * RightTextBox.Value / imageW);
+                double bottom = (double)(h * BottomTextBox.Value / imageH);
 
-                CaptureGridInner.Width = w - right - left;
-                CaptureGridInner.Height = h - top - bottom;
+                CaptureGridInner.Width = Math.Max(40, w - right - left);
+                CaptureGridInner.Height = Math.Max(40, h - top - bottom);
 
                 CaptureGridInner.Margin = new Thickness(
                     left,
@@ -428,6 +484,43 @@ namespace WPFCaptureSample
                     bottom
                 );
 
+            }
+        }
+        public string SaveDictionaryToXml(Dictionary<string, Thickness> dictionary)
+        {
+            var serializableDictionary = new SerializableDictionary();
+
+            foreach (var kvp in dictionary)
+            {
+                serializableDictionary.Entries.Add(new DictionaryEntry
+                {
+                    Key = kvp.Key,
+                    Value = kvp.Value
+                });
+            }
+
+            var serializer = new XmlSerializer(typeof(SerializableDictionary));
+            using (var writer = new StringWriter())
+            {
+                serializer.Serialize(writer, serializableDictionary);
+                return writer.ToString();
+            }
+        }
+
+        public Dictionary<string, Thickness> LoadDictionaryFromString(string xmlString)
+        {
+            var serializer = new XmlSerializer(typeof(SerializableDictionary));
+            using (var reader = new StringReader(xmlString))
+            {
+                var serializableDictionary = (SerializableDictionary)serializer.Deserialize(reader);
+                var dictionary = new Dictionary<string, Thickness>();
+
+                foreach (var entry in serializableDictionary.Entries)
+                {
+                    dictionary[entry.Key] = entry.Value;
+                }
+
+                return dictionary;
             }
         }
     }
