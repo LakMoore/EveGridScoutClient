@@ -56,18 +56,18 @@
             </StackPanel>
             <StackPanel Grid.Row="1" Margin="10,10,10,10">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <xctk:IntegerUpDown x:Name="TopTextBox" Margin="5" Width="50" Text="{Binding Top, UpdateSourceTrigger=PropertyChanged}"/>
+                    <xctk:IntegerUpDown x:Name="TopTextBox" Margin="5" Width="50" ValueChanged="MarginValueChanged" Value="0"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <xctk:IntegerUpDown x:Name="LeftTextBox" Margin="5" Width="50" Text="{Binding Left, UpdateSourceTrigger=PropertyChanged}"/>
+                    <xctk:IntegerUpDown x:Name="LeftTextBox" Margin="8" Width="50" ValueChanged="MarginValueChanged" Value="0"/>
                     <Image Source="/four-arrow.png" 
-           Width="24" Height="24" 
-           Margin="5" 
-           VerticalAlignment="Center" />
-                    <xctk:IntegerUpDown x:Name="BottomTextBox" Margin="5" Width="50" Text="{Binding Bottom, UpdateSourceTrigger=PropertyChanged}"/>
+                       Width="24" Height="24" 
+                       Margin="5" 
+                       VerticalAlignment="Center" />
+                    <xctk:IntegerUpDown x:Name="RightTextBox" Margin="8" Width="50" ValueChanged="MarginValueChanged" Value="0"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <xctk:IntegerUpDown x:Name="RightTextBox" Margin="5" Width="50" Text="{Binding Right, UpdateSourceTrigger=PropertyChanged}"/>
+                    <xctk:IntegerUpDown x:Name="BottomTextBox" Margin="5" Width="50" ValueChanged="MarginValueChanged" Value="0"/>
                 </StackPanel>
 
             </StackPanel>
@@ -84,7 +84,7 @@
         <Grid Grid.Column="1" x:Name="CaptureGrid" ScrollViewer.VerticalScrollBarVisibility="Disabled">
             <Canvas x:Name="myCanvas">
                 <Image x:Name="CapturedImage" Width="{Binding ActualWidth, ElementName=myCanvas, Mode=OneWay}" Height="{Binding ActualHeight, ElementName=myCanvas, Mode=OneWay}" SizeChanged="CapturedImage_SizeChanged" />
-                <Grid x:Name="CaptureGridInner" Width="352" Height="262">
+                <Grid x:Name="CaptureGridInner" HorizontalAlignment="Left" VerticalAlignment="Top">
                     <Rectangle x:Name="captureRectangle" StrokeThickness="2" Stroke="Red" />
                     <Rectangle x:Name="dragTopLeft" StrokeThickness="2" Stroke="Red" Width="20" Height="20" HorizontalAlignment="Left" VerticalAlignment="Top" Fill="#59FF0000" Cursor="Hand" />
                     <Rectangle x:Name="dragBottomRight" StrokeThickness="2" Stroke="Red"  Width="20" Height="20" HorizontalAlignment="Right" VerticalAlignment="Bottom" Fill="#59FF0000" Cursor="Hand" />

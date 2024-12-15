@@ -369,25 +369,42 @@ namespace WPFCaptureSample
 
         public Tesseract.Rect GetRectangleForOCR(Bitmap bitmap)
         {
-            double fullWidth = CaptureGrid.ActualWidth;
-            double fullHeight = CaptureGrid.ActualHeight;
-
-            double x = CaptureGridInner.Margin.Left;
-            double y = CaptureGridInner.Margin.Top;
-            double width = CaptureGridInner.ActualWidth;
-            double height = CaptureGridInner.ActualHeight;
-
             return new Tesseract.Rect(
-                (int)(bitmap.Width * x / fullWidth), 
-                (int)(bitmap.Height * y / fullHeight), 
-                (int)(bitmap.Width * width / fullWidth), 
-                (int)(bitmap.Height * height / fullHeight)
+                (int)LeftTextBox.Value, 
+                (int)TopTextBox.Value, 
+                bitmap.Width - (int)RightTextBox.Value - (int)LeftTextBox.Value, 
+                bitmap.Height - (int)TopTextBox.Value - (int)BottomTextBox.Value
             );
         }
 
         private void CapturedImage_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             
+        }
+
+        private void MarginValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (CapturedImage != null && !double.IsNaN(CapturedImage.ActualHeight))
+            {
+                double w = CapturedImage.ActualWidth;
+                double h = CapturedImage.ActualHeight;
+
+                double left = (double)(CaptureGrid.ActualWidth * LeftTextBox.Value / w);
+                double top = (double)(CaptureGrid.ActualHeight * TopTextBox.Value / h);
+                double right = (double)(CaptureGrid.ActualWidth * RightTextBox.Value / w);
+                double bottom = (double)(CaptureGrid.ActualHeight * BottomTextBox.Value / h);
+
+                CaptureGridInner.Width = w - right - left;
+                CaptureGridInner.Height = h - top - bottom;
+
+                CaptureGridInner.Margin = new Thickness(
+                    left,
+                    top,
+                    right,
+                    bottom
+                );
+
+            }
         }
     }
 }
