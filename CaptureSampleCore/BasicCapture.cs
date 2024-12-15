@@ -6,7 +6,6 @@ using Windows.Graphics;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
 using Windows.Graphics.DirectX.Direct3D11;
-using Windows.UI.Composition;
 using SharpDX.Direct3D11;
 
 namespace CaptureSampleCore
@@ -20,7 +19,6 @@ namespace CaptureSampleCore
 
         private IDirect3DDevice device;
         private SharpDX.Direct3D11.Device d3dDevice;
-        private SharpDX.DXGI.SwapChain1 swapChain;
 
         public event EventHandler<Bitmap> FrameCaptured;
 
@@ -49,7 +47,6 @@ namespace CaptureSampleCore
                 AlphaMode = SharpDX.DXGI.AlphaMode.Premultiplied,
                 Flags = SharpDX.DXGI.SwapChainFlags.None
             };
-            swapChain = new SharpDX.DXGI.SwapChain1(dxgiFactory, d3dDevice, ref description);
 
             framePool = Direct3D11CaptureFramePool.Create(
                 device,
@@ -67,7 +64,6 @@ namespace CaptureSampleCore
         {
             session?.Dispose();
             framePool?.Dispose();
-            swapChain?.Dispose();
             d3dDevice?.Dispose();
         }
 
@@ -95,18 +91,10 @@ namespace CaptureSampleCore
                 {
                     newSize = true;
                     lastSize = frame.ContentSize;
-                    swapChain.ResizeBuffers(
-                        2, 
-                        lastSize.Width, 
-                        lastSize.Height, 
-                        SharpDX.DXGI.Format.B8G8R8A8_UNorm, 
-                        SharpDX.DXGI.SwapChainFlags.None);
                 }
 
-                using (var backBuffer = swapChain.GetBackBuffer<SharpDX.Direct3D11.Texture2D>(0))
-                using (var bitmap = Direct3D11Helper.CreateSharpDXTexture2D(frame.Surface))
+                using (var backBuffer = Direct3D11Helper.CreateSharpDXTexture2D(frame.Surface))
                 {
-                    d3dDevice.ImmediateContext.CopyResource(bitmap, backBuffer);
 
                     if (FrameCaptured != null)
                     {
