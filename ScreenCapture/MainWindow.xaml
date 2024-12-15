@@ -60,7 +60,7 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                     <xctk:IntegerUpDown x:Name="LeftTextBox" Margin="5" Width="50" Text="{Binding Left, UpdateSourceTrigger=PropertyChanged}"/>
-                    <Image Source="pack://application:,,,/GridScout;component/Images/arrow.png" 
+                    <Image Source="/four-arrow.png" 
            Width="24" Height="24" 
            Margin="5" 
            VerticalAlignment="Center" />
