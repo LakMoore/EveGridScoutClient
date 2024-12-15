@@ -38,6 +38,7 @@ using Windows.Graphics.Capture;
 using Tesseract;
 using System.IO;
 using System.Windows.Media.Imaging;
+using Windows.Foundation;
 
 namespace WPFCaptureSample
 {
@@ -49,7 +50,6 @@ namespace WPFCaptureSample
         private IntPtr hwnd;
         private BasicCapture sample;
         private ObservableCollection<Process> processes;
-        private ObservableCollection<MonitorInfo> monitors;
         private TesseractEngine _tesseract;
         private const string TESSDATA_PATH = @"./tessdata";
         private bool _isProcessingOcr;
@@ -79,9 +79,9 @@ namespace WPFCaptureSample
 
         private void InitializeCaptureRectangle()
         {
-
-            CaptureGridInner.Width = CaptureGrid.Width;
-            CaptureGridInner.Height = CaptureGrid.Height;
+            // Initialise to parent's size
+            CaptureGridInner.Width = CaptureGrid.ActualWidth;
+            CaptureGridInner.Height = CaptureGrid.ActualHeight;
 
             // Mouse events for resizing
             dragTopLeft.MouseMove += DragTopLeft_MouseMove;
@@ -161,16 +161,7 @@ namespace WPFCaptureSample
         {
             StopCapture();
             WindowComboBox.SelectedIndex = -1;
-            MonitorComboBox.SelectedIndex = -1;
             await StartPickerCaptureAsync();
-        }
-
-        private void PrimaryMonitorButton_Click(object sender, RoutedEventArgs e)
-        {
-            StopCapture();
-            WindowComboBox.SelectedIndex = -1;
-            MonitorComboBox.SelectedIndex = -1;
-            StartPrimaryMonitorCapture();
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -189,14 +180,12 @@ namespace WPFCaptureSample
             var controlsWidth = (float)(ControlsGrid.ActualWidth * dpiX);
 
             InitWindowList();
-            InitMonitorList();
         }
 
         private void StopButton_Click(object sender, RoutedEventArgs e)
         {
             StopCapture();
             WindowComboBox.SelectedIndex = -1;
-            MonitorComboBox.SelectedIndex = -1;
         }
 
         private void WindowComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -207,7 +196,6 @@ namespace WPFCaptureSample
             if (process != null)
             {
                 StopCapture();
-                MonitorComboBox.SelectedIndex = -1;
                 var hwnd = process.MainWindowHandle;
                 try
                 {
@@ -217,29 +205,6 @@ namespace WPFCaptureSample
                 {
                     Debug.WriteLine($"Hwnd 0x{hwnd.ToInt32():X8} is not valid for capture!");
                     processes.Remove(process);
-                    comboBox.SelectedIndex = -1;
-                }
-            }
-        }
-
-        private void MonitorComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            var comboBox = (ComboBox)sender;
-            var monitor = (MonitorInfo)comboBox.SelectedItem;
-
-            if (monitor != null)
-            {
-                StopCapture();
-                WindowComboBox.SelectedIndex = -1;
-                var hmon = monitor.Hmon;
-                try
-                {
-                    StartHmonCapture(hmon);
-                }
-                catch (Exception)
-                {
-                    Debug.WriteLine($"Hmon 0x{hmon.ToInt32():X8} is not valid for capture!");
-                    monitors.Remove(monitor);
                     comboBox.SelectedIndex = -1;
                 }
             }
@@ -259,19 +224,6 @@ namespace WPFCaptureSample
                 processes.Add(process);
             }
         }
-
-        private void InitMonitorList()
-        {
-            monitors = new ObservableCollection<MonitorInfo>();
-            MonitorComboBox.ItemsSource = monitors;
-
-            var allMonitors = MonitorEnumerationHelper.GetMonitors();
-            foreach (var monitor in allMonitors)
-            {
-                monitors.Add(monitor);
-            }
-        }
-
         private async Task StartPickerCaptureAsync()
         {
             var picker = new GraphicsCapturePicker();
@@ -292,15 +244,6 @@ namespace WPFCaptureSample
             }
         }
 
-        private void StartHmonCapture(IntPtr hmon)
-        {
-            var item = CaptureHelper.CreateItemForMonitor(hmon);
-            if (item != null)
-            {
-                StartCaptureFromItem(item);
-            }
-        }
-
         private void StopCapture()
         {
             if (sample != null)
@@ -310,12 +253,6 @@ namespace WPFCaptureSample
                 sample.Dispose();
                 sample = null;
             }
-        }
-
-        private void StartPrimaryMonitorCapture()
-        {
-            var monitor = MonitorEnumerationHelper.GetMonitors().First();
-            StartHmonCapture(monitor.Hmon);
         }
 
         private void StartCaptureFromItem(GraphicsCaptureItem item)
@@ -337,34 +274,24 @@ namespace WPFCaptureSample
             sample.StartCapture();
         }
 
-        private string GetBitmapHash(Bitmap bitmap)
+        private Task<string> GetBitmapHash(Bitmap bitmap)
         {
-            using (var ms = new MemoryStream())
+            return Task.Run(() =>
             {
-                bitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Bmp);
-                using (var sha256 = System.Security.Cryptography.SHA256.Create())
+                using (var ms = new MemoryStream())
                 {
-                    return Convert.ToBase64String(sha256.ComputeHash(ms.ToArray()));
+                    bitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Bmp);
+                    using (var sha256 = System.Security.Cryptography.SHA256.Create())
+                    {
+                        return Convert.ToBase64String(sha256.ComputeHash(ms.ToArray()));
+                    }
                 }
-            }
+            });
+
         }
 
         private async void OnFrameCapturedAsync(object sender, Bitmap bitmap)
         {
-            // Convert Bitmap to BitmapImage
-            var bitmapImage = new BitmapImage();
-            using (var memoryStream = new MemoryStream())
-            {
-                bitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Bmp);
-                memoryStream.Seek(0, SeekOrigin.Begin);
-                
-                bitmapImage.BeginInit();
-                bitmapImage.StreamSource = memoryStream;
-                bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
-                bitmapImage.EndInit();
-                bitmapImage.Freeze(); // Optional: Freeze to make it cross-thread accessible
-            }
-            CapturedImage.Source = bitmapImage;
 
             if (_tesseract == null) return;
 
@@ -378,10 +305,29 @@ namespace WPFCaptureSample
             try
             {
                 _isProcessingOcr = true;
+
+                CapturedImage.Source = await Task.Run(() =>
+                {
+                    // Convert Bitmap to BitmapImage
+                    var bitmapImage = new BitmapImage();
+                    using (var memoryStream = new MemoryStream())
+                    {
+                        bitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Bmp);
+                        memoryStream.Seek(0, SeekOrigin.Begin);
+
+                        bitmapImage.BeginInit();
+                        bitmapImage.StreamSource = memoryStream;
+                        bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
+                        bitmapImage.EndInit();
+                        bitmapImage.Freeze(); // Optional: Freeze to make it cross-thread accessible
+                    }
+                    return bitmapImage;
+                });
+
                 using (bitmap)
                 {
                     // Check if the bitmap has changed
-                    string currentHash = GetBitmapHash(bitmap);
+                    string currentHash = await GetBitmapHash(bitmap);
                     if (currentHash == _lastBitmapHash)
                     {
                         return;
@@ -437,6 +383,11 @@ namespace WPFCaptureSample
                 (int)(bitmap.Width * width / fullWidth), 
                 (int)(bitmap.Height * height / fullHeight)
             );
+        }
+
+        private void CapturedImage_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            
         }
     }
 }
