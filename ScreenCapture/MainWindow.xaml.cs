@@ -38,7 +38,6 @@ using Windows.Graphics.Capture;
 using Tesseract;
 using System.IO;
 using System.Windows.Media.Imaging;
-using Windows.Foundation;
 
 namespace WPFCaptureSample
 {
@@ -62,6 +61,12 @@ namespace WPFCaptureSample
             InitializeComponent();
             InitializeTesseract();
             InitializeCaptureRectangle();
+
+            // Load persisted values
+            TopTextBox.Value = GridScout.Properties.Settings.Default.Top;
+            LeftTextBox.Value = GridScout.Properties.Settings.Default.Left;
+            BottomTextBox.Value = GridScout.Properties.Settings.Default.Bottom;
+            RightTextBox.Value = GridScout.Properties.Settings.Default.Right;
         }
 
         private void InitializeTesseract()
@@ -346,7 +351,6 @@ namespace WPFCaptureSample
                         }
                     });
 
-                    Console.WriteLine("NEWTEXT");
                     await Dispatcher.BeginInvoke(new Action(() =>
                     {
                         OcrResultsTextBox.Text = text;
@@ -379,20 +383,40 @@ namespace WPFCaptureSample
 
         private void CapturedImage_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            
+            ReDrawCaptureRectangle();
+
         }
 
         private void MarginValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
-            if (CapturedImage != null && !double.IsNaN(CapturedImage.ActualHeight))
+            if (CapturedImage != null && CapturedImage.Source != null && !double.IsNaN(CapturedImage.ActualHeight))
             {
+                ReDrawCaptureRectangle();
+
+                // Save the current values to settings
+                GridScout.Properties.Settings.Default.Top = (int)TopTextBox.Value;
+                GridScout.Properties.Settings.Default.Left = (int)LeftTextBox.Value;
+                GridScout.Properties.Settings.Default.Bottom = (int)BottomTextBox.Value;
+                GridScout.Properties.Settings.Default.Right = (int)RightTextBox.Value;
+                GridScout.Properties.Settings.Default.Save(); // Persist the changes
+
+            }
+        }
+
+        private void ReDrawCaptureRectangle()
+        {
+            if (CapturedImage != null && CapturedImage.Source != null && !double.IsNaN(CapturedImage.ActualHeight))
+            {
+                double imageW = CapturedImage.Source.Width;
+                double imageH = CapturedImage.Source.Height;
+
                 double w = CapturedImage.ActualWidth;
                 double h = CapturedImage.ActualHeight;
 
-                double left = (double)(CaptureGrid.ActualWidth * LeftTextBox.Value / w);
-                double top = (double)(CaptureGrid.ActualHeight * TopTextBox.Value / h);
-                double right = (double)(CaptureGrid.ActualWidth * RightTextBox.Value / w);
-                double bottom = (double)(CaptureGrid.ActualHeight * BottomTextBox.Value / h);
+                double left = (double)(CaptureGrid.ActualWidth * LeftTextBox.Value / imageW);
+                double top = (double)(CaptureGrid.ActualHeight * TopTextBox.Value / imageH);
+                double right = (double)(CaptureGrid.ActualWidth * RightTextBox.Value / imageW);
+                double bottom = (double)(CaptureGrid.ActualHeight * BottomTextBox.Value / imageH);
 
                 CaptureGridInner.Width = w - right - left;
                 CaptureGridInner.Height = h - top - bottom;
