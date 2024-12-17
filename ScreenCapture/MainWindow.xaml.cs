@@ -40,7 +40,6 @@ using System.IO;
 using System.Windows.Media.Imaging;
 using System.Collections.Generic;
 using System.Xml.Serialization;
-using System.Windows.Documents;
 
 namespace GridScout
 {
@@ -56,10 +55,10 @@ namespace GridScout
         private const string TESSDATA_PATH = @"./tessdata";
         private bool _isProcessingOcr;
         private bool _isDragging;
-        private string _lastBitmapHash;
+        private Pix _lastPix;
         private double lastMouseX;
         private double lastMouseY;
-        private string itemName  = "";
+        private string itemName = "";
         private Dictionary<string, Thickness> captureGrids = new Dictionary<string, Thickness>();
 
         public MainWindow()
@@ -236,8 +235,8 @@ namespace GridScout
             var currentProcess = Process.GetCurrentProcess();
             var processesList = Process.GetProcesses()
                 .Where(
-                    p => p.MainWindowHandle != IntPtr.Zero 
-                    && p.Id != currentProcess.Id 
+                    p => p.MainWindowHandle != IntPtr.Zero
+                    && p.Id != currentProcess.Id
                     && p.MainWindowTitle.StartsWith("Eve", StringComparison.OrdinalIgnoreCase)
                 )
                 .OrderBy(p => p.MainWindowTitle);
@@ -304,22 +303,6 @@ namespace GridScout
 
         }
 
-        private Task<string> GetBitmapHash(Bitmap bitmap)
-        {
-            return Task.Run(() =>
-            {
-                using (var ms = new MemoryStream())
-                {
-                    bitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Bmp);
-                    using (var sha256 = System.Security.Cryptography.SHA256.Create())
-                    {
-                        return Convert.ToBase64String(sha256.ComputeHash(ms.ToArray()));
-                    }
-                }
-            });
-
-        }
-
         private async void OnFrameCapturedAsync(object sender, Bitmap bitmap)
         {
 
@@ -342,65 +325,78 @@ namespace GridScout
                 float valueTwo = float.Parse(ValueTwo.Text);
                 if (float.IsNaN(valueTwo)) valueTwo = 0.1f;
 
-                (var bitmapImage, var pix) = await Task.Run(() =>
-                {
-                    // Convert Bitmap to BitmapImage
-                    var tempBitmap = new BitmapImage();
-                    Pix tempPix;
-                    using (var memoryStream = new MemoryStream())
-                    {
-                        bitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Bmp);
-                        memoryStream.Seek(0, SeekOrigin.Begin);
-
-                        tempBitmap.BeginInit();
-                        tempBitmap.StreamSource = memoryStream;
-                        tempBitmap.CacheOption = BitmapCacheOption.OnLoad;
-                        tempBitmap.EndInit();
-                        tempBitmap.Freeze(); // Optional: Freeze to make it cross-thread accessible
-
-                        memoryStream.Seek(0, SeekOrigin.Begin);
-                        tempPix = Pix.LoadFromMemory(memoryStream.ToArray());
-                        tempPix = tempPix.Scale(scale, scale);
-                        tempPix = tempPix.ConvertRGBToGray();
-                        tempPix = tempPix.Invert();   // This is essential
-                        tempPix = tempPix.BinarizeSauvola(8, 0.19f, false);  //8, 0.19f, false works with scale = 5f
-                        //tempPix = tempPix.BinarizeSauvola(valueOne, valueTwo, false);  //8, 0.19f, false works
-                    }
-                    return (tempBitmap, tempPix);
-                });
-
-                CapturedImage.Source = bitmapImage;
-
                 using (bitmap)
                 {
-                    // Check if the bitmap has changed
-                    string currentHash = await GetBitmapHash(bitmap);
-                    if (currentHash == _lastBitmapHash)
-                    {
-                        return;
-                    }
-                    _lastBitmapHash = currentHash;
+                    var cropRect = new Rectangle(
+                        (int)LeftTextBox.Value,
+                        (int)TopTextBox.Value,
+                        bitmap.Width - (int)RightTextBox.Value - (int)LeftTextBox.Value,
+                        bitmap.Height - (int)BottomTextBox.Value - (int)TopTextBox.Value
+                    );
 
-                    var rect = GetRectangleForOCR(pix, scale);
-
-                    // Run OCR processing on a background thread
-                    var text = await Task.Run(() =>
+                    (var bitmapImage, var pix) = await Task.Run(() =>
                     {
-                        using (var page = _tesseract.Process(
-                            pix, 
-                            rect, 
-                            PageSegMode.SingleBlock
-                        ))
+                        // Convert Bitmap to BitmapImage
+                        var tempBitmap = new BitmapImage();
+                        using (var memoryStream = new MemoryStream())
                         {
-                            return page.GetText();
+                            bitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Bmp);
+                            memoryStream.Seek(0, SeekOrigin.Begin);
+
+                            tempBitmap.BeginInit();
+                            tempBitmap.StreamSource = memoryStream;
+                            tempBitmap.CacheOption = BitmapCacheOption.OnLoad;
+                            tempBitmap.EndInit();
+                            tempBitmap.Freeze(); // Optional: Freeze to make it cross-thread accessible
                         }
+
+                        Pix tempPix;
+                        using (var memoryStream = new MemoryStream())
+                        {
+                            using (var croppedBitmap = new Bitmap(cropRect.Width, cropRect.Height))
+                            {
+                                using (var g = Graphics.FromImage(croppedBitmap))
+                                {
+                                    g.DrawImage(bitmap, new Rectangle(0, 0, croppedBitmap.Width, croppedBitmap.Height), cropRect, GraphicsUnit.Pixel);
+                                }
+                                croppedBitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Bmp);
+                            }
+                            memoryStream.Seek(0, SeekOrigin.Begin);
+
+                            tempPix = Pix.LoadFromMemory(memoryStream.ToArray());
+                            tempPix = tempPix.Scale(scale, scale);
+                            tempPix = tempPix.ConvertRGBToGray();
+                            tempPix = tempPix.Invert();   // This is essential
+                            tempPix = tempPix.BinarizeSauvola(8, 0.19f, false);  //8, 0.19f, false works with scale = 5f
+                                                                                 //tempPix = tempPix.BinarizeSauvola(valueOne, valueTwo, false);  //8, 0.19f, false works
+                        }
+                        return (tempBitmap, tempPix);
                     });
 
-                    await Dispatcher.BeginInvoke(new Action(() =>
+                    CapturedImage.Source = bitmapImage;
+
+                    // Check if the bitmap has changed
+                    if (!pix.Equals(_lastPix))
                     {
-                        OcrResultsTextBox.Text = text;
-                        OcrResultsTextBox.ScrollToEnd();
-                    }));
+                        // Run OCR processing on a background thread
+                        var text = await Task.Run(() =>
+                        {
+                            using (var page = _tesseract.Process(
+                                pix,
+                                PageSegMode.SingleBlock
+                            ))
+                            {
+                                return page.GetText();
+                            }
+                        });
+
+                        await Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            OcrResultsTextBox.Text = text;
+                            OcrResultsTextBox.ScrollToEnd();
+                        }));
+                    }
+                    _lastPix = pix.Clone();
                 }
             }
             catch (Exception ex)
@@ -416,20 +412,9 @@ namespace GridScout
             }
         }
 
-        public Tesseract.Rect GetRectangleForOCR(Pix pix, float scale)
-        {
-            return new Tesseract.Rect(
-                (int)(LeftTextBox.Value * scale), 
-                (int)(TopTextBox.Value * scale), 
-                (int)(pix.Width - scale * RightTextBox.Value - scale * LeftTextBox.Value), 
-                (int)(pix.Height - scale * TopTextBox.Value - scale * BottomTextBox.Value)
-            );
-        }
-
         private void CapturedImage_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             ReDrawCaptureRectangle();
-
         }
 
         private void MarginValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
