@@ -32,12 +32,26 @@
         Title="GridScout Client" Height="450" Width="800"
         Loaded="Window_Loaded">
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="23"/>
+            <RowDefinition/>
+        </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="200" />
             <ColumnDefinition />
         </Grid.ColumnDefinitions>
 
-        <Grid x:Name="ControlsGrid" Grid.Column="0">
+        <Grid Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2">
+            <TabControl>
+                <TabItem Header="#A Scout" />
+                <TabItem Header="#B Scout" />
+                <TabItem Header="#C Scout" />
+                <TabItem Header="#D Scout" />
+                <TabItem Header="#E Scout" />
+            </TabControl>
+        </Grid>
+
+        <Grid x:Name="ControlsGrid" Grid.Row="1" Grid.Column="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -83,7 +97,7 @@
             <Button x:Name="StopButton" Grid.Row="3" Content="Stop Capturing" Click="StopButton_Click" Margin="10" />
         </Grid>
 
-        <Grid Grid.Column="1" x:Name="CaptureGrid" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+        <Grid Grid.Row="1" Grid.Column="1" x:Name="CaptureGrid" ScrollViewer.VerticalScrollBarVisibility="Disabled">
             <Canvas x:Name="myCanvas">
                 <Image x:Name="CapturedImage" Width="{Binding ActualWidth, ElementName=myCanvas, Mode=OneWay}" Height="{Binding ActualHeight, ElementName=myCanvas, Mode=OneWay}" SizeChanged="CapturedImage_SizeChanged" />
                 <Grid x:Name="CaptureGridInner" HorizontalAlignment="Left" VerticalAlignment="Top">

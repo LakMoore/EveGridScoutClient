@@ -260,3 +260,5 @@ paket-files/
 __pycache__/
 *.pyc
 ScreenCapture/tessdata/
+ScreenCapture/tempTrainingData/eng.traineddata.old
+ScreenCapture/tempTrainingData/

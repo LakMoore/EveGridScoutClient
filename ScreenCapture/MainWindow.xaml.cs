@@ -40,6 +40,7 @@ using System.IO;
 using System.Windows.Media.Imaging;
 using System.Collections.Generic;
 using System.Xml.Serialization;
+using System.Windows.Documents;
 
 namespace GridScout
 {
@@ -54,6 +55,7 @@ namespace GridScout
         private TesseractEngine _tesseract;
         private const string TESSDATA_PATH = @"./tessdata";
         private bool _isProcessingOcr;
+        private bool _isDragging;
         private string _lastBitmapHash;
         private double lastMouseX;
         private double lastMouseY;
@@ -113,6 +115,7 @@ namespace GridScout
             // Logic to initiate resizing
             if (sender is System.Windows.Shapes.Rectangle rectangle)
             {
+                _isDragging = true;
                 rectangle.CaptureMouse();
                 lastMouseX = e.GetPosition(myCanvas).X;
                 lastMouseY = e.GetPosition(myCanvas).Y;
@@ -129,12 +132,11 @@ namespace GridScout
                 double deltaX = mouseX - lastMouseX;
                 double deltaY = mouseY - lastMouseY;
 
-                CaptureGridInner.Margin = new Thickness(
-                    Math.Max(0, CaptureGridInner.Margin.Left + deltaX), 
-                    Math.Max(0, CaptureGridInner.Margin.Top + deltaY), 
-                    CaptureGridInner.Margin.Right, 
-                    CaptureGridInner.Margin.Bottom
-                );
+                double speed = CapturedImage.Source.Height / CapturedImage.ActualHeight;
+
+                LeftTextBox.Value += (int)(deltaX * speed);
+                TopTextBox.Value += (int)(deltaY * speed);
+
                 lastMouseX = mouseX;
                 lastMouseY = mouseY;
             }
@@ -146,6 +148,8 @@ namespace GridScout
             if (sender is System.Windows.Shapes.Rectangle rectangle)
             {
                 rectangle.ReleaseMouseCapture();
+                _isDragging = false;
+                SaveDetails();
             }
 
         }
@@ -161,12 +165,10 @@ namespace GridScout
                 double deltaX = lastMouseX - mouseX;
                 double deltaY = lastMouseY - mouseY;
 
-                CaptureGridInner.Margin = new Thickness(
-                    CaptureGridInner.Margin.Left,
-                    CaptureGridInner.Margin.Top,
-                    Math.Max(0, CaptureGridInner.Margin.Right + deltaX),
-                    Math.Max(0, CaptureGridInner.Margin.Bottom + deltaY)
-                );
+                double speed = CapturedImage.Source.Height / CapturedImage.ActualHeight;
+
+                RightTextBox.Value += (int)(deltaX * speed);
+                BottomTextBox.Value += (int)(deltaY * speed);
 
                 lastMouseX = mouseX;
                 lastMouseY = mouseY;
@@ -233,7 +235,11 @@ namespace GridScout
 
             var currentProcess = Process.GetCurrentProcess();
             var processesList = Process.GetProcesses()
-                .Where(p => p.MainWindowHandle != IntPtr.Zero && p.Id != currentProcess.Id)
+                .Where(
+                    p => p.MainWindowHandle != IntPtr.Zero 
+                    && p.Id != currentProcess.Id 
+                    && p.MainWindowTitle.StartsWith("Eve", StringComparison.OrdinalIgnoreCase)
+                )
                 .OrderBy(p => p.MainWindowTitle);
             foreach (var process in processesList)
             {
@@ -320,7 +326,7 @@ namespace GridScout
             if (_tesseract == null) return;
 
             // Check if we're already processing
-            if (_isProcessingOcr)
+            if (_isProcessingOcr || _isDragging)
             {
                 bitmap.Dispose();
                 return;
@@ -452,11 +458,19 @@ namespace GridScout
                     );
                 }
 
-                // Save the captureGrids dictionary to a string
-                Properties.Settings.Default.CaptureGrids = SaveDictionaryToXml(captureGrids);
-                Properties.Settings.Default.Save(); // Persist the changes
+                if (!_isDragging)
+                {
+                    SaveDetails();
+                }
 
             }
+        }
+
+        private void SaveDetails()
+        {
+            // Save the captureGrids dictionary to a string
+            Properties.Settings.Default.CaptureGrids = SaveDictionaryToXml(captureGrids);
+            Properties.Settings.Default.Save(); // Persist the changes
         }
 
         private void ReDrawCaptureRectangle()
@@ -474,14 +488,17 @@ namespace GridScout
                 double right = (double)(w * RightTextBox.Value / imageW);
                 double bottom = (double)(h * BottomTextBox.Value / imageH);
 
+                double heightPadding = Math.Max(0, (CaptureGrid.ActualHeight - h) / 2);
+                double widthPadding = Math.Max(0,  (CaptureGrid.ActualWidth - w) / 2);
+
                 CaptureGridInner.Width = Math.Max(40, w - right - left);
                 CaptureGridInner.Height = Math.Max(40, h - top - bottom);
 
                 CaptureGridInner.Margin = new Thickness(
-                    left,
-                    top,
-                    right,
-                    bottom
+                    widthPadding + left,
+                    heightPadding + top,
+                    widthPadding + right,
+                    heightPadding + bottom
                 );
 
             }
