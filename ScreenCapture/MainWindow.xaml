@@ -32,43 +32,51 @@
         Title="GridScout Client" Height="450" Width="800"
         Loaded="Window_Loaded">
     <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="23"/>
-            <RowDefinition/>
-        </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="200" />
+            <ColumnDefinition Width="277" />
             <ColumnDefinition />
         </Grid.ColumnDefinitions>
 
-        <Grid Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2">
-            <TabControl>
-                <TabItem Header="#A Scout" />
-                <TabItem Header="#B Scout" />
-                <TabItem Header="#C Scout" />
-                <TabItem Header="#D Scout" />
-                <TabItem Header="#E Scout" />
-            </TabControl>
-        </Grid>
-
-        <Grid x:Name="ControlsGrid" Grid.Row="1" Grid.Column="0">
+        <Grid x:Name="ControlsGrid" Grid.Column="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <StackPanel Grid.Row="0" Margin="10">
-                <Button x:Name="PickerButton" Content="Use Picker" Click="PickerButton_Click" Margin="10" />
-                <ComboBox x:Name="WindowComboBox" Margin="10" SelectionChanged="WindowComboBox_SelectionChanged">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding MainWindowTitle}" />
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
-                <TextBox x:Name="ValueOne" Width="50" Text="2"/>
-                <TextBox x:Name="ValueTwo" Width="50" Text="0.1"/>
+            <StackPanel x:Name="ScoutSelector" Grid.Row="0" Margin="10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Label Margin="0 10" Grid.Column="0" >#A</Label>
+                    <ComboBox Grid.Column="1" x:Name="WindowComboBoxA" Margin="10" SelectionChanged="WindowComboBox_SelectionChanged">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding MainWindowTitle}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button Padding="5 0" Margin="0 10 5 10" Grid.Column="2" Tag="0" Click="ShowButton_Click">Show</Button>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Label Margin="0 10" Grid.Column="0" >#B</Label>
+                    <ComboBox Grid.Column="1" x:Name="WindowComboBoxB" Margin="10" SelectionChanged="WindowComboBox_SelectionChanged">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding MainWindowTitle}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button Padding="5 0" Margin="0 10 5 10" Grid.Column="2" Tag="1" Click="ShowButton_Click">Show</Button>
+                </Grid>
             </StackPanel>
             <StackPanel Grid.Row="1" Margin="10,10,10,10">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
@@ -97,7 +105,7 @@
             <Button x:Name="StopButton" Grid.Row="3" Content="Stop Capturing" Click="StopButton_Click" Margin="10" />
         </Grid>
 
-        <Grid Grid.Row="1" Grid.Column="1" x:Name="CaptureGrid" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+        <Grid Grid.Column="1" x:Name="CaptureGrid" ScrollViewer.VerticalScrollBarVisibility="Disabled">
             <Canvas x:Name="myCanvas">
                 <Image x:Name="CapturedImage" Width="{Binding ActualWidth, ElementName=myCanvas, Mode=OneWay}" Height="{Binding ActualHeight, ElementName=myCanvas, Mode=OneWay}" SizeChanged="CapturedImage_SizeChanged" />
                 <Grid x:Name="CaptureGridInner" HorizontalAlignment="Left" VerticalAlignment="Top">

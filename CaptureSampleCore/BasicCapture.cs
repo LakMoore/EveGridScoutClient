@@ -67,6 +67,11 @@ namespace CaptureSampleCore
             d3dDevice?.Dispose();
         }
 
+        public GraphicsCaptureItem GetItem()
+        {
+            return item;
+        }
+
         public void StartCapture()
         {
             session.StartCapture();

@@ -40,6 +40,8 @@ using System.IO;
 using System.Windows.Media.Imaging;
 using System.Collections.Generic;
 using System.Xml.Serialization;
+using System.Windows.Media;
+using Xceed.Wpf.AvalonDock.Controls;
 
 namespace GridScout
 {
@@ -49,17 +51,15 @@ namespace GridScout
     public partial class MainWindow : Window
     {
         private IntPtr hwnd;
-        private BasicCapture sample;
         private ObservableCollection<Process> processes;
         private TesseractEngine _tesseract;
         private const string TESSDATA_PATH = @"./tessdata";
         private bool _isProcessingOcr;
         private bool _isDragging;
-        private Pix _lastPix;
         private double lastMouseX;
         private double lastMouseY;
         private string itemName = "";
-        private Dictionary<string, Thickness> captureGrids = new Dictionary<string, Thickness>();
+        private ScoutCaptureCollection _scoutCaptures;
 
         public MainWindow()
         {
@@ -70,7 +70,7 @@ namespace GridScout
             // Load persisted values
             if (Properties.Settings.Default.CaptureGrids.Length > 0)
             {
-                captureGrids = LoadDictionaryFromString(Properties.Settings.Default.CaptureGrids);
+                _scoutCaptures = LoadDictionaryFromString(Properties.Settings.Default.CaptureGrids);
             }
         }
 
@@ -174,13 +174,6 @@ namespace GridScout
             }
         }
 
-        private async void PickerButton_Click(object sender, RoutedEventArgs e)
-        {
-            StopCapture();
-            WindowComboBox.SelectedIndex = -1;
-            await StartPickerCaptureAsync();
-        }
-
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             var interopWindow = new WindowInteropHelper(this);
@@ -202,7 +195,6 @@ namespace GridScout
         private void StopButton_Click(object sender, RoutedEventArgs e)
         {
             StopCapture();
-            WindowComboBox.SelectedIndex = -1;
         }
 
         private void WindowComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -212,11 +204,23 @@ namespace GridScout
 
             if (process != null)
             {
-                StopCapture();
                 var hwnd = process.MainWindowHandle;
                 try
                 {
                     StartHwndCapture(hwnd);
+                    // make the combobox read-only
+                    comboBox.IsEnabled = false;
+
+                    // loop through the scout list setting the background to transparent
+                    for (int i = 0; i < ScoutSelector.Children.Count; i++)
+                    {
+                        var tempScout = ScoutSelector.Children[i] as Grid;
+                        tempScout.Background = new SolidColorBrush(Colors.Transparent);
+                    }
+
+                    Grid thisGrid = (Grid)comboBox.Parent;
+                    thisGrid.Background = new SolidColorBrush(Colors.LightGray);
+
                 }
                 catch (Exception)
                 {
@@ -230,7 +234,15 @@ namespace GridScout
         private void InitWindowList()
         {
             processes = new ObservableCollection<Process>();
-            WindowComboBox.ItemsSource = processes;
+
+            foreach (Grid scout in ScoutSelector.Children)
+            {
+                var cmb = scout.FindLogicalChildren<ComboBox>().First();
+                if (cmb.Text == itemName)
+                {
+                    cmb.ItemsSource = processes;
+                }
+            }
 
             var currentProcess = Process.GetCurrentProcess();
             var processesList = Process.GetProcesses()
@@ -245,16 +257,6 @@ namespace GridScout
                 processes.Add(process);
             }
         }
-        private async Task StartPickerCaptureAsync()
-        {
-            var picker = new GraphicsCapturePicker();
-            picker.SetWindow(new WindowInteropHelper(this).Handle);
-            var item = await picker.PickSingleItemAsync();
-            if (item != null)
-            {
-                StartCaptureFromItem(item);
-            }
-        }
 
         private void StartHwndCapture(IntPtr hwnd)
         {
@@ -267,12 +269,34 @@ namespace GridScout
 
         private void StopCapture()
         {
-            if (sample != null)
+            if (_scoutCaptures != null && _scoutCaptures.ContainsKey(itemName))
             {
-                sample.FrameCaptured -= OnFrameCapturedAsync;
-                sample.StopCapture();
-                sample.Dispose();
-                sample = null;
+                var capture = _scoutCaptures.Get(itemName).capture;
+                if (capture != null)
+                {
+                    capture.FrameCaptured -= OnFrameCapturedAsync;
+                    capture.StopCapture();
+                    capture.Dispose();
+                    capture = null;
+                }
+
+                foreach(Grid scout in ScoutSelector.Children)
+                {
+                    var cmb = scout.FindLogicalChildren<ComboBox>().First();
+                    Process process = (Process)cmb.SelectedItem;
+                    if (process != null && process.MainWindowTitle == itemName)
+                    {
+                        cmb.IsEnabled = true;
+                        cmb.SelectedIndex = -1;
+                    }
+                }
+
+                CapturedImage.Source = null;
+                itemName = "";
+                TopTextBox.Value = 0;
+                RightTextBox.Value = 0;
+                BottomTextBox.Value = 0;
+                LeftTextBox.Value = 0;
             }
         }
 
@@ -283,23 +307,31 @@ namespace GridScout
                 return;
             }
 
-            StopCapture();
-
             var device = Direct3D11Helper.CreateDevice();
-            sample = new BasicCapture(device, item);
-            sample.FrameCaptured += OnFrameCapturedAsync;
-            sample.StartCapture();
+            var capture = new BasicCapture(device, item);
+            capture.FrameCaptured += OnFrameCapturedAsync;
+            capture.StartCapture();
 
             itemName = item.DisplayName;
 
-            // Fetch the rect from captureGrids using the item title
-            if (captureGrids.TryGetValue(item.DisplayName, out var rect))
+            if (!_scoutCaptures.ContainsKey(itemName))
             {
-                TopTextBox.Value = (int)rect.Top;
-                LeftTextBox.Value = (int)rect.Left;
-                RightTextBox.Value = (int)rect.Right;
-                BottomTextBox.Value = (int)rect.Bottom;
+                var thisSC = new ScoutCapture
+                {
+                    Key = itemName,
+                    margins = new Thickness()
+                };
+                _scoutCaptures.Add(thisSC);
             }
+
+            var scoutCapture = _scoutCaptures.Get(itemName);
+            scoutCapture.capture = capture;
+
+            var rect = scoutCapture.margins;
+            TopTextBox.Value = (int)rect.Top;
+            LeftTextBox.Value = (int)rect.Left;
+            RightTextBox.Value = (int)rect.Right;
+            BottomTextBox.Value = (int)rect.Bottom;
 
         }
 
@@ -320,18 +352,20 @@ namespace GridScout
                 _isProcessingOcr = true;
 
                 float scale = 5f;
-                int valueOne = int.Parse(ValueOne.Text);
-                if (valueOne == 0) valueOne = 2;
-                float valueTwo = float.Parse(ValueTwo.Text);
-                if (float.IsNaN(valueTwo)) valueTwo = 0.1f;
 
                 using (bitmap)
                 {
+                    BasicCapture src = (BasicCapture)sender;
+                    var thisItemName = src.GetItem().DisplayName;
+                    var thisScout = _scoutCaptures.Get(thisItemName);
+
+                    var margins = thisScout.margins;
+
                     var cropRect = new Rectangle(
-                        (int)LeftTextBox.Value,
-                        (int)TopTextBox.Value,
-                        bitmap.Width - (int)RightTextBox.Value - (int)LeftTextBox.Value,
-                        bitmap.Height - (int)BottomTextBox.Value - (int)TopTextBox.Value
+                        (int)margins.Left,
+                        (int)margins.Top,
+                        bitmap.Width - (int)(margins.Right + margins.Left),
+                        bitmap.Height - (int)(margins.Bottom + margins.Top)
                     );
 
                     (var bitmapImage, var pix) = await Task.Run(() =>
@@ -373,10 +407,15 @@ namespace GridScout
                         return (tempBitmap, tempPix);
                     });
 
-                    CapturedImage.Source = bitmapImage;
+                    thisScout.lastImage = bitmapImage;
+
+                    if (thisItemName == itemName)
+                    {
+                        CapturedImage.Source = bitmapImage;
+                    }
 
                     // Check if the bitmap has changed
-                    if (!pix.Equals(_lastPix))
+                    if (!pix.Equals(thisScout.lastPix))
                     {
                         // Run OCR processing on a background thread
                         var text = await Task.Run(() =>
@@ -396,7 +435,7 @@ namespace GridScout
                             OcrResultsTextBox.ScrollToEnd();
                         }));
                     }
-                    _lastPix = pix.Clone();
+                    thisScout.lastPix = pix.Clone();
                 }
             }
             catch (Exception ex)
@@ -423,25 +462,13 @@ namespace GridScout
             {
                 ReDrawCaptureRectangle();
 
-                // Save the current values to captupeGrids
-                if (!captureGrids.ContainsKey(itemName))
-                {
-                    captureGrids.Add(itemName, new Thickness(
-                        (int)LeftTextBox.Value,
-                        (int)TopTextBox.Value,
-                        (int)RightTextBox.Value,
-                        (int)BottomTextBox.Value
-                    ));
-                }
-                else
-                {
-                    captureGrids[itemName] = new Thickness(
-                        (int)LeftTextBox.Value,
-                        (int)TopTextBox.Value,
-                        (int)RightTextBox.Value,
-                        (int)BottomTextBox.Value
-                    );
-                }
+                var scout = _scoutCaptures.Get(itemName);
+                scout.margins = new Thickness(
+                    (int)LeftTextBox.Value,
+                    (int)TopTextBox.Value,
+                    (int)RightTextBox.Value,
+                    (int)BottomTextBox.Value
+                );
 
                 if (!_isDragging)
                 {
@@ -454,7 +481,7 @@ namespace GridScout
         private void SaveDetails()
         {
             // Save the captureGrids dictionary to a string
-            Properties.Settings.Default.CaptureGrids = SaveDictionaryToXml(captureGrids);
+            Properties.Settings.Default.CaptureGrids = SaveDictionaryToXml(_scoutCaptures);
             Properties.Settings.Default.Save(); // Persist the changes
         }
 
@@ -462,6 +489,7 @@ namespace GridScout
         {
             if (CapturedImage != null && CapturedImage.Source != null && !double.IsNaN(CapturedImage.ActualHeight))
             {
+
                 double imageW = CapturedImage.Source.Width;
                 double imageH = CapturedImage.Source.Height;
 
@@ -488,20 +516,9 @@ namespace GridScout
 
             }
         }
-        public string SaveDictionaryToXml(Dictionary<string, Thickness> dictionary)
+        public string SaveDictionaryToXml(ScoutCaptureCollection serializableDictionary)
         {
-            var serializableDictionary = new SerializableDictionary();
-
-            foreach (var kvp in dictionary)
-            {
-                serializableDictionary.Entries.Add(new DictionaryEntry
-                {
-                    Key = kvp.Key,
-                    Value = kvp.Value
-                });
-            }
-
-            var serializer = new XmlSerializer(typeof(SerializableDictionary));
+            var serializer = new XmlSerializer(typeof(ScoutCaptureCollection));
             using (var writer = new StringWriter())
             {
                 serializer.Serialize(writer, serializableDictionary);
@@ -509,20 +526,45 @@ namespace GridScout
             }
         }
 
-        public Dictionary<string, Thickness> LoadDictionaryFromString(string xmlString)
+        public ScoutCaptureCollection LoadDictionaryFromString(string xmlString)
         {
-            var serializer = new XmlSerializer(typeof(SerializableDictionary));
+            var serializer = new XmlSerializer(typeof(ScoutCaptureCollection));
             using (var reader = new StringReader(xmlString))
             {
-                var serializableDictionary = (SerializableDictionary)serializer.Deserialize(reader);
-                var dictionary = new Dictionary<string, Thickness>();
+                var serializableDictionary = (ScoutCaptureCollection)serializer.Deserialize(reader);
+                return serializableDictionary;
+            }
+        }
 
-                foreach (var entry in serializableDictionary.Entries)
+        private void ShowButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button)
+            {
+                Grid thisGrid = (Grid)button.Parent;
+                var cmbBox = thisGrid.FindLogicalChildren<ComboBox>().First();
+                if (cmbBox.SelectedIndex > -1)
                 {
-                    dictionary[entry.Key] = entry.Value;
-                }
+                    // loop through the scout list setting the background to transparent unless the index is the same as the button tag
+                    for (int i = 0; i < ScoutSelector.Children.Count; i++)
+                    {
+                        var tempScout = ScoutSelector.Children[i] as Grid;
+                        tempScout.Background = new SolidColorBrush(Colors.Transparent);
+                    }
 
-                return dictionary;
+                    thisGrid.Background = new SolidColorBrush(Colors.LightGray);
+                    Process process = (Process)cmbBox.SelectedItem;
+                    itemName = process.MainWindowTitle;
+
+                    var scout = _scoutCaptures.Get(itemName);
+                    var margins = scout.margins;
+                    LeftTextBox.Value = (int)margins.Left;
+                    TopTextBox.Value = (int)margins.Top;
+                    BottomTextBox.Value = (int)margins.Bottom;
+                    RightTextBox.Value = (int)margins.Right;
+
+                    CapturedImage.Source = scout.lastImage;
+                    ReDrawCaptureRectangle();
+                }
             }
         }
     }
