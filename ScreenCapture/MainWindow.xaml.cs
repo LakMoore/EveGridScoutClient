@@ -47,21 +47,41 @@ namespace GridScout
     /// </summary>
     public partial class MainWindow : Window
     {
-        private IntPtr hwnd;
-        private ObservableCollection<Process> processes = new ObservableCollection<Process>();
-        private TesseractEngine _tesseract;
+        private readonly ObservableCollection<Process> processes = new ObservableCollection<Process>();
+        private readonly ScoutCaptureCollection _scoutInfo;
+        private readonly TesseractEngine _tesseract;
+
         private const string TESSDATA_PATH = @"./tessdata";
+
         private bool _isProcessingOcr;
         private bool _isDragging;
         private double lastMouseX;
         private double lastMouseY;
         private string itemName = "";
-        private ScoutCaptureCollection _scoutInfo;
 
         public MainWindow()
         {
             InitializeComponent();
-            InitializeTesseract();
+
+            // Initialise Tesseract
+            try
+            {
+                var config = new Dictionary<string, object>
+                {
+                    { "tessedit_write_images", true },
+                    //{ "load_system_dawg", false },
+                    //{ "load_freq_dawg", false }
+                };
+
+                _tesseract = new TesseractEngine(TESSDATA_PATH, "eng", EngineMode.LstmOnly, null, config, false);
+
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error initializing Tesseract OCR: {ex.Message}\nMake sure tessdata folder exists in the application directory.",
+                    "OCR Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+
             InitializeCaptureRectangle();
 
             // Load persisted values
@@ -73,40 +93,7 @@ namespace GridScout
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            var interopWindow = new WindowInteropHelper(this);
-            hwnd = interopWindow.Handle;
-
-            var presentationSource = PresentationSource.FromVisual(this);
-            double dpiX = 1.0;
-            double dpiY = 1.0;
-            if (presentationSource != null)
-            {
-                dpiX = presentationSource.CompositionTarget.TransformToDevice.M11;
-                dpiY = presentationSource.CompositionTarget.TransformToDevice.M22;
-            }
-            var controlsWidth = (float)(ControlsGrid.ActualWidth * dpiX);
-
             RefreshAvailableEveWindowList();
-        }
-
-        private void InitializeTesseract()
-        {
-            try
-            {
-                //tessedit_write_images
-                var config = new Dictionary<string, object>();
-                config.Add("tessedit_write_images", true);
-                //config.Add("load_system_dawg", false);
-                //config.Add("load_freq_dawg", false);
-
-                _tesseract = new TesseractEngine(TESSDATA_PATH, "eng", EngineMode.LstmOnly, null, config, false);
-
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error initializing Tesseract OCR: {ex.Message}\nMake sure tessdata folder exists in the application directory.",
-                    "OCR Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
         }
 
         private void InitializeCaptureRectangle()
@@ -247,15 +234,15 @@ namespace GridScout
                 var thisSC = new ScoutCapture
                 {
                     Key = itemName,
-                    margins = new Thickness()
+                    Margins = new Thickness()
                 };
                 _scoutInfo.Add(thisSC);
             }
 
             var scoutCapture = _scoutInfo.Get(itemName);
-            scoutCapture.capture = capture;
+            scoutCapture.Capture = capture;
 
-            var rect = scoutCapture.margins;
+            var rect = scoutCapture.Margins;
             TopTextBox.Value = (int)rect.Top;
             LeftTextBox.Value = (int)rect.Left;
             RightTextBox.Value = (int)rect.Right;
@@ -289,9 +276,9 @@ namespace GridScout
 
                     src.PauseCapture();
                     var toResume = _scoutInfo.GetNextInOrder(thisScout);
-                    toResume.capture.ResumeCapture();
+                    toResume.Capture.ResumeCapture();
 
-                    var margins = thisScout.margins;
+                    var margins = thisScout.Margins;
 
                     var cropRect = new Rectangle(
                         (int)margins.Left,
@@ -339,7 +326,7 @@ namespace GridScout
                         return (tempBitmap, tempPix);
                     });
 
-                    thisScout.lastImage = bitmapImage;
+                    thisScout.LastImage = bitmapImage;
 
                     if (thisItemName == itemName)
                     {
@@ -347,7 +334,7 @@ namespace GridScout
                     }
 
                     // Check if the bitmap has changed
-                    if (!pix.Equals(thisScout.lastPix))
+                    if (!pix.Equals(thisScout.LastPix))
                     {
                         // Run OCR processing on a background thread
                         var text = await Task.Run(() =>
@@ -367,7 +354,7 @@ namespace GridScout
                             OcrResultsTextBox.ScrollToEnd();
                         }));
                     }
-                    thisScout.lastPix = pix.Clone();
+                    thisScout.LastPix = pix.Clone();
                 }
             }
             catch (Exception ex)
@@ -395,7 +382,7 @@ namespace GridScout
                 ReDrawCaptureRectangle();
 
                 var scout = _scoutInfo.Get(itemName);
-                scout.margins = new Thickness(
+                scout.Margins = new Thickness(
                     (int)LeftTextBox.Value,
                     (int)TopTextBox.Value,
                     (int)RightTextBox.Value,
@@ -548,13 +535,13 @@ namespace GridScout
             itemName = process.MainWindowTitle;
 
             var info = _scoutInfo.Get(itemName);
-            var margins = info.margins;
+            var margins = info.Margins;
             LeftTextBox.Value = (int)margins.Left;
             TopTextBox.Value = (int)margins.Top;
             BottomTextBox.Value = (int)margins.Bottom;
             RightTextBox.Value = (int)margins.Right;
 
-            CapturedImage.Source = info.lastImage;
+            CapturedImage.Source = info.LastImage;
             ReDrawCaptureRectangle();
         }
 
@@ -573,14 +560,14 @@ namespace GridScout
                 }
             }
 
-            var capture = _scoutInfo.Get(itemName).capture;
+            var capture = _scoutInfo.Get(itemName).Capture;
             if (capture != null)
             {
                 capture.FrameCaptured -= OnFrameCapturedAsync;
                 capture.StopCapture();
                 capture.Dispose();
                 capture = null;
-                _scoutInfo.Get(itemName).capture = null;
+                _scoutInfo.Get(itemName).Capture = null;
             }
 
             // Add the process back into the list of available processes

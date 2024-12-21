@@ -12,13 +12,13 @@ namespace CaptureCore
 {
     public class BasicCapture : IDisposable
     {
-        private GraphicsCaptureItem item;
-        private Direct3D11CaptureFramePool framePool;
+        private readonly GraphicsCaptureItem item;
+        private readonly Direct3D11CaptureFramePool framePool;
         private GraphicsCaptureSession session;
         private SizeInt32 lastSize;
 
-        private IDirect3DDevice device;
-        private SharpDX.Direct3D11.Device d3dDevice;
+        private readonly IDirect3DDevice device;
+        private readonly Device d3dDevice;
 
         private bool _paused;
 
@@ -29,27 +29,6 @@ namespace CaptureCore
             item = i;
             device = d;
             d3dDevice = Direct3D11Helper.CreateSharpDXDevice(device);
-
-            var dxgiFactory = new SharpDX.DXGI.Factory2();
-            var description = new SharpDX.DXGI.SwapChainDescription1()
-            {
-                Width = item.Size.Width,
-                Height = item.Size.Height,
-                Format = SharpDX.DXGI.Format.B8G8R8A8_UNorm,
-                Stereo = false,
-                SampleDescription = new SharpDX.DXGI.SampleDescription()
-                {
-                    Count = 1,
-                    Quality = 0
-                },
-                Usage = SharpDX.DXGI.Usage.RenderTargetOutput,
-                BufferCount = 2,
-                Scaling = SharpDX.DXGI.Scaling.Stretch,
-                SwapEffect = SharpDX.DXGI.SwapEffect.FlipSequential,
-                AlphaMode = SharpDX.DXGI.AlphaMode.Premultiplied,
-                Flags = SharpDX.DXGI.SwapChainFlags.None
-            };
-
             framePool = Direct3D11CaptureFramePool.Create(
                 device,
                 DirectXPixelFormat.B8G8R8A8UIntNormalized,

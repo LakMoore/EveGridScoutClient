@@ -40,7 +40,7 @@ namespace GridScout
             {
                 index++;
                 if (index >= Entries.Count) index = 0;
-            } while (Entries[index].capture == null);
+            } while (Entries[index].Capture == null);
             return Entries[index];
         }
 
@@ -52,16 +52,16 @@ namespace GridScout
         public string Key { get; set; }
 
         [XmlElement("Value")]
-        public Thickness margins { get; set; }
+        public Thickness Margins { get; set; }
 
         [XmlIgnore]
-        public BasicCapture capture { get; set; }
+        public BasicCapture Capture { get; set; }
 
         [XmlIgnore]
-        public Pix lastPix { get; set; }
+        public Pix LastPix { get; set; }
 
         [XmlIgnore]
-        public BitmapImage lastImage { get; set; }
+        public BitmapImage LastImage { get; set; }
 
     }
 }
