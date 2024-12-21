@@ -22,7 +22,7 @@
 //  THE SOFTWARE.
 //  ---------------------------------------------------------------------------------
 
-using CaptureSampleCore;
+using CaptureCore;
 using Composition.WindowsRuntimeHelpers;
 using System;
 using System.Collections.ObjectModel;

@@ -29,7 +29,7 @@ using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX.Direct3D11;
 using Windows.UI.Composition;
 
-namespace CaptureSampleCore
+namespace CaptureCore
 {
     public class BasicApplication : IDisposable
     {

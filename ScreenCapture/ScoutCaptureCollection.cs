@@ -1,4 +1,4 @@
-﻿using CaptureSampleCore;
+﻿using CaptureCore;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Media.Imaging;

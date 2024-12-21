@@ -8,7 +8,7 @@ using Windows.Graphics.DirectX;
 using Windows.Graphics.DirectX.Direct3D11;
 using SharpDX.Direct3D11;
 
-namespace CaptureSampleCore
+namespace CaptureCore
 {
     public class BasicCapture : IDisposable
     {
