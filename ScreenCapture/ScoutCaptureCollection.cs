@@ -32,6 +32,18 @@ namespace GridScout
         {
             Entries.RemoveAll(x => x.Key == key);
         }
+
+        public ScoutCapture GetNextInOrder(ScoutCapture entry)
+        {
+            var index = Entries.IndexOf(entry);
+            do
+            {
+                index++;
+                if (index >= Entries.Count) index = 0;
+            } while (Entries[index].capture == null);
+            return Entries[index];
+        }
+
     }
 
     public class ScoutCapture

@@ -20,6 +20,8 @@ namespace CaptureSampleCore
         private IDirect3DDevice device;
         private SharpDX.Direct3D11.Device d3dDevice;
 
+        private bool _paused;
+
         public event EventHandler<Bitmap> FrameCaptured;
 
         public BasicCapture(IDirect3DDevice d, GraphicsCaptureItem i)
@@ -56,8 +58,6 @@ namespace CaptureSampleCore
             session = framePool.CreateCaptureSession(i);
             session.IsCursorCaptureEnabled = false;
             lastSize = i.Size;
-
-            framePool.FrameArrived += OnFrameArrived;
         }
 
         public void Dispose()
@@ -74,22 +74,46 @@ namespace CaptureSampleCore
 
         public void StartCapture()
         {
+            _paused = false;
+            framePool.FrameArrived += OnFrameArrived;
             session.StartCapture();
+        }
+
+        public void PauseCapture()
+        {
+            _paused = true;
+        }
+
+        public void ResumeCapture()
+        {
+            _paused = false;
         }
 
         public void StopCapture()
         {
+            _paused = true;
+            framePool.FrameArrived -= OnFrameArrived;
             session?.Dispose();
             session = null;
         }
 
         private void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
         {
+
             var newSize = false;
 
             using (var frame = sender.TryGetNextFrame())
             {
-                if (frame == null) return;
+                if (frame == null)
+                {
+                    Console.WriteLine("Null Frame!");
+                    return;
+                }
+
+                if (_paused)
+                {
+                    return;
+                }
 
                 if (frame.ContentSize.Width != lastSize.Width ||
                     frame.ContentSize.Height != lastSize.Height)

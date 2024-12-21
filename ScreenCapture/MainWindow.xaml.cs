@@ -31,7 +31,6 @@ using System.Drawing;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using Windows.Graphics.Capture;
@@ -40,8 +39,6 @@ using System.IO;
 using System.Windows.Media.Imaging;
 using System.Collections.Generic;
 using System.Xml.Serialization;
-using System.Windows.Media;
-using Xceed.Wpf.AvalonDock.Controls;
 
 namespace GridScout
 {
@@ -51,7 +48,7 @@ namespace GridScout
     public partial class MainWindow : Window
     {
         private IntPtr hwnd;
-        private ObservableCollection<Process> processes;
+        private ObservableCollection<Process> processes = new ObservableCollection<Process>();
         private TesseractEngine _tesseract;
         private const string TESSDATA_PATH = @"./tessdata";
         private bool _isProcessingOcr;
@@ -59,7 +56,7 @@ namespace GridScout
         private double lastMouseX;
         private double lastMouseY;
         private string itemName = "";
-        private ScoutCaptureCollection _scoutCaptures;
+        private ScoutCaptureCollection _scoutInfo;
 
         public MainWindow()
         {
@@ -70,8 +67,26 @@ namespace GridScout
             // Load persisted values
             if (Properties.Settings.Default.CaptureGrids.Length > 0)
             {
-                _scoutCaptures = LoadDictionaryFromString(Properties.Settings.Default.CaptureGrids);
+                _scoutInfo = LoadDictionaryFromString(Properties.Settings.Default.CaptureGrids);
             }
+        }
+
+        private void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            var interopWindow = new WindowInteropHelper(this);
+            hwnd = interopWindow.Handle;
+
+            var presentationSource = PresentationSource.FromVisual(this);
+            double dpiX = 1.0;
+            double dpiY = 1.0;
+            if (presentationSource != null)
+            {
+                dpiX = presentationSource.CompositionTarget.TransformToDevice.M11;
+                dpiY = presentationSource.CompositionTarget.TransformToDevice.M22;
+            }
+            var controlsWidth = (float)(ControlsGrid.ActualWidth * dpiX);
+
+            RefreshAvailableEveWindowList();
         }
 
         private void InitializeTesseract()
@@ -174,87 +189,33 @@ namespace GridScout
             }
         }
 
-        private void Window_Loaded(object sender, RoutedEventArgs e)
+        private void RefreshAvailableEveWindowList()
         {
-            var interopWindow = new WindowInteropHelper(this);
-            hwnd = interopWindow.Handle;
-
-            var presentationSource = PresentationSource.FromVisual(this);
-            double dpiX = 1.0;
-            double dpiY = 1.0;
-            if (presentationSource != null)
-            {
-                dpiX = presentationSource.CompositionTarget.TransformToDevice.M11;
-                dpiY = presentationSource.CompositionTarget.TransformToDevice.M22;
-            }
-            var controlsWidth = (float)(ControlsGrid.ActualWidth * dpiX);
-
-            InitWindowList();
-        }
-
-        private void StopButton_Click(object sender, RoutedEventArgs e)
-        {
-            StopCapture();
-        }
-
-        private void WindowComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            var comboBox = (ComboBox)sender;
-            var process = (Process)comboBox.SelectedItem;
-
-            if (process != null)
-            {
-                var hwnd = process.MainWindowHandle;
-                try
-                {
-                    StartHwndCapture(hwnd);
-                    // make the combobox read-only
-                    comboBox.IsEnabled = false;
-
-                    // loop through the scout list setting the background to transparent
-                    for (int i = 0; i < ScoutSelector.Children.Count; i++)
-                    {
-                        var tempScout = ScoutSelector.Children[i] as Grid;
-                        tempScout.Background = new SolidColorBrush(Colors.Transparent);
-                    }
-
-                    Grid thisGrid = (Grid)comboBox.Parent;
-                    thisGrid.Background = new SolidColorBrush(Colors.LightGray);
-
-                }
-                catch (Exception)
-                {
-                    Debug.WriteLine($"Hwnd 0x{hwnd.ToInt32():X8} is not valid for capture!");
-                    processes.Remove(process);
-                    comboBox.SelectedIndex = -1;
-                }
-            }
-        }
-
-        private void InitWindowList()
-        {
-            processes = new ObservableCollection<Process>();
-
-            foreach (Grid scout in ScoutSelector.Children)
-            {
-                var cmb = scout.FindLogicalChildren<ComboBox>().First();
-                if (cmb.Text == itemName)
-                {
-                    cmb.ItemsSource = processes;
-                }
-            }
-
-            var currentProcess = Process.GetCurrentProcess();
             var processesList = Process.GetProcesses()
-                .Where(
-                    p => p.MainWindowHandle != IntPtr.Zero
-                    && p.Id != currentProcess.Id
-                    && p.MainWindowTitle.StartsWith("Eve", StringComparison.OrdinalIgnoreCase)
-                )
-                .OrderBy(p => p.MainWindowTitle);
+                    .Where(
+                        p => p.MainWindowHandle != IntPtr.Zero
+                        && p.MainWindowTitle.StartsWith("Eve -", StringComparison.OrdinalIgnoreCase)
+                    )
+                    .OrderBy(p => p.MainWindowTitle);
+
             foreach (var process in processesList)
             {
-                processes.Add(process);
+                if (processes.FirstOrDefault(x => x.Id == process.Id) == null)
+                {
+                    processes.Add(process);
+                }
+            }
+
+            foreach (ScoutSelector scout in ScoutSelectorPanel.Children)
+            {
+                if (scout.SelectedProcess != null)
+                {
+                    var matchingProcesses = processes.Where(x => x.Id == scout.SelectedProcess.Id).ToList();
+                    foreach (Process processToRemove in matchingProcesses)
+                    {
+                        processes.Remove(processToRemove);
+                    }
+                }
             }
         }
 
@@ -264,39 +225,6 @@ namespace GridScout
             if (item != null)
             {
                 StartCaptureFromItem(item);
-            }
-        }
-
-        private void StopCapture()
-        {
-            if (_scoutCaptures != null && _scoutCaptures.ContainsKey(itemName))
-            {
-                var capture = _scoutCaptures.Get(itemName).capture;
-                if (capture != null)
-                {
-                    capture.FrameCaptured -= OnFrameCapturedAsync;
-                    capture.StopCapture();
-                    capture.Dispose();
-                    capture = null;
-                }
-
-                foreach(Grid scout in ScoutSelector.Children)
-                {
-                    var cmb = scout.FindLogicalChildren<ComboBox>().First();
-                    Process process = (Process)cmb.SelectedItem;
-                    if (process != null && process.MainWindowTitle == itemName)
-                    {
-                        cmb.IsEnabled = true;
-                        cmb.SelectedIndex = -1;
-                    }
-                }
-
-                CapturedImage.Source = null;
-                itemName = "";
-                TopTextBox.Value = 0;
-                RightTextBox.Value = 0;
-                BottomTextBox.Value = 0;
-                LeftTextBox.Value = 0;
             }
         }
 
@@ -314,17 +242,17 @@ namespace GridScout
 
             itemName = item.DisplayName;
 
-            if (!_scoutCaptures.ContainsKey(itemName))
+            if (!_scoutInfo.ContainsKey(itemName))
             {
                 var thisSC = new ScoutCapture
                 {
                     Key = itemName,
                     margins = new Thickness()
                 };
-                _scoutCaptures.Add(thisSC);
+                _scoutInfo.Add(thisSC);
             }
 
-            var scoutCapture = _scoutCaptures.Get(itemName);
+            var scoutCapture = _scoutInfo.Get(itemName);
             scoutCapture.capture = capture;
 
             var rect = scoutCapture.margins;
@@ -357,7 +285,11 @@ namespace GridScout
                 {
                     BasicCapture src = (BasicCapture)sender;
                     var thisItemName = src.GetItem().DisplayName;
-                    var thisScout = _scoutCaptures.Get(thisItemName);
+                    var thisScout = _scoutInfo.Get(thisItemName);
+
+                    src.PauseCapture();
+                    var toResume = _scoutInfo.GetNextInOrder(thisScout);
+                    toResume.capture.ResumeCapture();
 
                     var margins = thisScout.margins;
 
@@ -401,8 +333,8 @@ namespace GridScout
                             tempPix = tempPix.Scale(scale, scale);
                             tempPix = tempPix.ConvertRGBToGray();
                             tempPix = tempPix.Invert();   // This is essential
-                            tempPix = tempPix.BinarizeSauvola(8, 0.19f, false);  //8, 0.19f, false works with scale = 5f
-                                                                                 //tempPix = tempPix.BinarizeSauvola(valueOne, valueTwo, false);  //8, 0.19f, false works
+                            tempPix = tempPix.BinarizeSauvola(9, 0.185f, false);  //9, 0.185f, false works with scale = 5f
+                            //tempPix = tempPix.BinarizeSauvola(valueOne, valueTwo, false);  //8, 0.19f, false works
                         }
                         return (tempBitmap, tempPix);
                     });
@@ -462,7 +394,7 @@ namespace GridScout
             {
                 ReDrawCaptureRectangle();
 
-                var scout = _scoutCaptures.Get(itemName);
+                var scout = _scoutInfo.Get(itemName);
                 scout.margins = new Thickness(
                     (int)LeftTextBox.Value,
                     (int)TopTextBox.Value,
@@ -481,7 +413,7 @@ namespace GridScout
         private void SaveDetails()
         {
             // Save the captureGrids dictionary to a string
-            Properties.Settings.Default.CaptureGrids = SaveDictionaryToXml(_scoutCaptures);
+            Properties.Settings.Default.CaptureGrids = SaveDictionaryToXml(_scoutInfo);
             Properties.Settings.Default.Save(); // Persist the changes
         }
 
@@ -536,36 +468,135 @@ namespace GridScout
             }
         }
 
-        private void ShowButton_Click(object sender, RoutedEventArgs e)
+        private void AddButton_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button button)
+            // ScoutSelectorPanel's children follow the patterh #A, #B, #C, #D, #E, etc.
+            // Find the first gap in the pattern and create a new ScoutSelector there
+            int i = 0;
+            for (i = 0; i < ScoutSelectorPanel.Children.Count; i++)
             {
-                Grid thisGrid = (Grid)button.Parent;
-                var cmbBox = thisGrid.FindLogicalChildren<ComboBox>().First();
-                if (cmbBox.SelectedIndex > -1)
+                var scout = (ScoutSelector)ScoutSelectorPanel.Children[i];
+                if (scout.ScoutLabelContent != "#" + ((char)('A' + i)).ToString())
                 {
-                    // loop through the scout list setting the background to transparent unless the index is the same as the button tag
-                    for (int i = 0; i < ScoutSelector.Children.Count; i++)
-                    {
-                        var tempScout = ScoutSelector.Children[i] as Grid;
-                        tempScout.Background = new SolidColorBrush(Colors.Transparent);
-                    }
-
-                    thisGrid.Background = new SolidColorBrush(Colors.LightGray);
-                    Process process = (Process)cmbBox.SelectedItem;
-                    itemName = process.MainWindowTitle;
-
-                    var scout = _scoutCaptures.Get(itemName);
-                    var margins = scout.margins;
-                    LeftTextBox.Value = (int)margins.Left;
-                    TopTextBox.Value = (int)margins.Top;
-                    BottomTextBox.Value = (int)margins.Bottom;
-                    RightTextBox.Value = (int)margins.Right;
-
-                    CapturedImage.Source = scout.lastImage;
-                    ReDrawCaptureRectangle();
+                    break;
                 }
             }
+
+            var newScout = new ScoutSelector
+            {
+                ScoutLabelContent = "#" + ((char)('A' + i)).ToString()
+            };
+            newScout.ScoutSelected += ScoutSelector_ScoutSelected;
+            newScout.ShowScout += ScoutSelector_ShowScout;
+            newScout.StopScout += ScoutSelector_StopScout;
+            newScout.DeleteScout += ScoutSelector_DeleteScout;
+            newScout.SetProcesses(processes);
+            ScoutSelectorPanel.Children.Insert(i, newScout);
+        }
+
+        private void ScoutSelector_DeleteScout(object sender, EventArgs e)
+        {
+            var scout = (ScoutSelector)sender;
+            ScoutSelectorPanel.Children.Remove(scout);
+        }
+
+        private void ScoutSelector_ScoutSelected(object sender, EventArgs e)
+        {
+            var scout = (ScoutSelector)sender;
+            itemName = scout.ScoutLabelContent;
+            foreach (ScoutSelector item in ScoutSelectorPanel.Children)
+            {
+                if (item != scout)
+                {
+                    item.NotSelected();
+                }
+            }
+
+            var process = scout.SelectedProcess;
+
+            if (process != null)
+            {
+                var hwnd = process.MainWindowHandle;
+                try
+                {
+                    StartHwndCapture(hwnd);
+                }
+                catch (Exception)
+                {
+                    Debug.WriteLine($"Hwnd 0x{hwnd.ToInt32():X8} is not valid for capture!");
+                    scout.ClearSelection();
+                }
+
+                // remove process from the list so it cannot be used by other selectors
+                processes.Remove(process);
+            }
+        }
+
+        private void ScoutSelector_ShowScout(object sender, EventArgs e)
+        {
+            var scout = (ScoutSelector)sender;
+            itemName = scout.ScoutLabelContent;
+            foreach (ScoutSelector item in ScoutSelectorPanel.Children)
+            {
+                if (item != scout)
+                {
+                    item.NotSelected();
+                }
+            }
+
+            Process process = scout.SelectedProcess;
+            itemName = process.MainWindowTitle;
+
+            var info = _scoutInfo.Get(itemName);
+            var margins = info.margins;
+            LeftTextBox.Value = (int)margins.Left;
+            TopTextBox.Value = (int)margins.Top;
+            BottomTextBox.Value = (int)margins.Bottom;
+            RightTextBox.Value = (int)margins.Right;
+
+            CapturedImage.Source = info.lastImage;
+            ReDrawCaptureRectangle();
+        }
+
+        private void ScoutSelector_StopScout(object sender, EventArgs e)
+        {
+            var scout = (ScoutSelector)sender;
+            Process process = scout.SelectedProcess;
+
+            itemName = process.MainWindowTitle;
+
+            foreach (ScoutSelector item in ScoutSelectorPanel.Children)
+            {
+                if (item != scout)
+                {
+                    item.NotSelected();
+                }
+            }
+
+            var capture = _scoutInfo.Get(itemName).capture;
+            if (capture != null)
+            {
+                capture.FrameCaptured -= OnFrameCapturedAsync;
+                capture.StopCapture();
+                capture.Dispose();
+                capture = null;
+                _scoutInfo.Get(itemName).capture = null;
+            }
+
+            // Add the process back into the list of available processes
+            processes.Add(process);
+
+            CapturedImage.Source = null;
+            itemName = "";
+            TopTextBox.Value = 0;
+            RightTextBox.Value = 0;
+            BottomTextBox.Value = 0;
+            LeftTextBox.Value = 0;
+        }
+
+        private void RefreshButton_Click(object sender, RoutedEventArgs e)
+        {
+            RefreshAvailableEveWindowList();
         }
     }
 }
