@@ -36,12 +36,14 @@ namespace GridScout
         public ScoutCapture GetNextInOrder(ScoutCapture entry)
         {
             var index = Entries.IndexOf(entry);
+            ScoutCapture temp;
             do
             {
                 index++;
                 if (index >= Entries.Count) index = 0;
-            } while (Entries[index].Capture == null);
-            return Entries[index];
+                temp = Entries[index];
+            } while (temp == null || temp.Capture == null || temp.Capture.GetItem() == null);
+            return temp;
         }
 
     }

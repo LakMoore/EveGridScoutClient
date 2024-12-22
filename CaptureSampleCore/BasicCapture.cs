@@ -12,7 +12,7 @@ namespace CaptureCore
 {
     public class BasicCapture : IDisposable
     {
-        private readonly GraphicsCaptureItem item;
+        private GraphicsCaptureItem item;
         private readonly Direct3D11CaptureFramePool framePool;
         private GraphicsCaptureSession session;
         private SizeInt32 lastSize;
@@ -37,6 +37,13 @@ namespace CaptureCore
             session = framePool.CreateCaptureSession(i);
             session.IsCursorCaptureEnabled = false;
             lastSize = i.Size;
+            item.Closed += ItemClosed;
+        }
+
+        private void ItemClosed(GraphicsCaptureItem sender, object args)
+        {
+            Console.WriteLine("Graphics Item Closed!");
+            item = null;
         }
 
         public void Dispose()

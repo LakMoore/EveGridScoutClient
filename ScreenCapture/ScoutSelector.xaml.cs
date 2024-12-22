@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -42,6 +43,20 @@ namespace GridScout
         public void SetProcesses(ObservableCollection<Process> processes)
         {
             ClientSelector.ItemsSource = processes;
+        }
+
+        public bool TryGetNewVersionOfProcess()
+        {
+            // get the first process with a matching title but different ID
+            var newProcess = (ClientSelector.ItemsSource as ObservableCollection<Process>).FirstOrDefault(
+                x => x.MainWindowTitle == _process.MainWindowTitle && x.Id != _process.Id
+            );
+            if (newProcess != null)
+            {
+                _process = newProcess;
+                return true;
+            }
+            return false;
         }
 
         public void ClearSelection()

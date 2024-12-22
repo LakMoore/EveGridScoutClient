@@ -32,13 +32,14 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
-using System.Windows.Interop;
 using Windows.Graphics.Capture;
 using Tesseract;
 using System.IO;
 using System.Windows.Media.Imaging;
 using System.Collections.Generic;
 using System.Xml.Serialization;
+using System.Net.Http;
+using System.Text;
 
 namespace GridScout
 {
@@ -50,14 +51,18 @@ namespace GridScout
         private readonly ObservableCollection<Process> processes = new ObservableCollection<Process>();
         private readonly ScoutCaptureCollection _scoutInfo;
         private readonly TesseractEngine _tesseract;
+        private EventHandler<IOrderedEnumerable<Process>> ProcessListChanged;
 
         private const string TESSDATA_PATH = @"./tessdata";
+        private const string SERVER_URL = "https://ffew.space/gridscout/";
+        //private const string SERVER_URL = "http://localhost:3000/";
 
         private bool _isProcessingOcr;
         private bool _isDragging;
         private double lastMouseX;
         private double lastMouseY;
         private string itemName = "";
+        private Task processChecker;
 
         public MainWindow()
         {
@@ -93,7 +98,9 @@ namespace GridScout
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            RefreshAvailableEveWindowList();
+            ProcessListChanged += RefreshAvailableEveWindowList;
+            // Start the process checker on a separate thread
+            processChecker = Task.Run(ProcessChecker);
         }
 
         private void InitializeCaptureRectangle()
@@ -176,31 +183,120 @@ namespace GridScout
             }
         }
 
-        private void RefreshAvailableEveWindowList()
+        private async Task ProcessChecker()
         {
-            var processesList = Process.GetProcesses()
-                    .Where(
-                        p => p.MainWindowHandle != IntPtr.Zero
-                        && p.MainWindowTitle.StartsWith("Eve -", StringComparison.OrdinalIgnoreCase)
-                    )
-                    .OrderBy(p => p.MainWindowTitle);
+            List<Process> lastProcesses = null;
 
+            while (true)
+            {
+                var processesList = Process.GetProcessesByName("exefile")
+                .Where(
+                    p =>
+                    //p.MainWindowHandle != IntPtr.Zero &&
+                    p.MainWindowTitle.StartsWith("Eve -", StringComparison.OrdinalIgnoreCase)
+                )
+                .OrderBy(p => p.MainWindowTitle);
+
+                // deep comparison of the two lists
+                if (lastProcesses == null || !ProcessListEquals(processesList.ToList(), lastProcesses))
+                {
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        ProcessListChanged?.Invoke(this, processesList);
+                    });
+                }
+                // deep clone the collection
+                lastProcesses = processesList.ToList();
+
+                await Task.Delay(5000);
+
+            }
+        }
+
+        public static bool ProcessListEquals(List<Process> list1, List<Process> list2)
+        {   
+            // Compare two lists of processes for equality using deep comparison of the process ID
+            if (list1 == null || list2 == null || list1.Count != list2.Count)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < list1.Count; i++)
+            {
+                if (list1[i].Id != list2[i].Id)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private void RefreshAvailableEveWindowList(object sender, IOrderedEnumerable<Process> args)
+        {
+            var processesList = args;
+
+            // check for missing processes
+            foreach (var process in processes)
+            {
+                var inList = processesList.FirstOrDefault(x => x.MainWindowTitle == process.MainWindowTitle);
+                if (inList == null)
+                {
+                    // process is no longer in the list
+                    processes.Remove(process);
+                }
+            }
+
+            // check for new processes
             foreach (var process in processesList)
             {
-                if (processes.FirstOrDefault(x => x.Id == process.Id) == null)
+                var inList = processes.FirstOrDefault(x => x.MainWindowTitle == process.MainWindowTitle);
+                if (inList == null)
                 {
+                    // totally missing
+                    processes.Add(process);
+                } 
+                else if (inList.Id != process.Id)
+                {
+                    // present but with a new ID
+                    processes.Remove(inList);
                     processes.Add(process);
                 }
             }
 
+            // check in-use processes
             foreach (ScoutSelector scout in ScoutSelectorPanel.Children)
             {
                 if (scout.SelectedProcess != null)
                 {
-                    var matchingProcesses = processes.Where(x => x.Id == scout.SelectedProcess.Id).ToList();
-                    foreach (Process processToRemove in matchingProcesses)
+                    var inList = processes.FirstOrDefault(
+                        x => x.MainWindowTitle == scout.SelectedProcess.MainWindowTitle
+                    );
+                    if (inList != null)
                     {
-                        processes.Remove(processToRemove);
+                        if (inList.Id != scout.SelectedProcess.Id)
+                        {
+                            // We've found a new process with a matching title!!
+                            var info = _scoutInfo.Get(inList.MainWindowTitle);
+                            var capture = info.Capture;
+
+                            // Stop the old capture
+                            if (capture != null)
+                            {
+                                capture.FrameCaptured -= OnFrameCapturedAsync;
+                                capture.StopCapture();
+                                capture.Dispose();
+                                capture = null;
+                            }
+                            info.Capture = null;
+
+                            // Start a new capture
+                            StartCaptureFromProcess(inList);
+
+                            // update the process stored in the scout object
+                            scout.TryGetNewVersionOfProcess();
+                        }
+                        processes.Remove(inList);
                     }
                 }
             }
@@ -320,7 +416,7 @@ namespace GridScout
                             tempPix = tempPix.Scale(scale, scale);
                             tempPix = tempPix.ConvertRGBToGray();
                             tempPix = tempPix.Invert();   // This is essential
-                            tempPix = tempPix.BinarizeSauvola(9, 0.185f, false);  //9, 0.185f, false works with scale = 5f
+                            tempPix = tempPix.BinarizeSauvola(8, 0.19f, false);  //9, 0.185f, false works with scale = 5f
                             //tempPix = tempPix.BinarizeSauvola(valueOne, valueTwo, false);  //8, 0.19f, false works
                         }
                         return (tempBitmap, tempPix);
@@ -353,6 +449,16 @@ namespace GridScout
                             OcrResultsTextBox.Text = text;
                             OcrResultsTextBox.ScrollToEnd();
                         }));
+
+                        // send the text to the server URL using a POST request
+                        using (var client = new HttpClient())
+                        {
+                            var content = new StringContent(text, Encoding.UTF8, "text/plain");
+                            var response = await client.PostAsync(SERVER_URL, content);
+                            var body = await response.Content.ReadAsStringAsync();
+                            Console.WriteLine(body);
+                        }
+
                     }
                     thisScout.LastPix = pix.Clone();
                 }
@@ -491,31 +597,41 @@ namespace GridScout
         {
             var scout = (ScoutSelector)sender;
             itemName = scout.ScoutLabelContent;
+
+            UnSelectOthers(scout);
+
+            var process = scout.SelectedProcess;
+
+            if (process != null)
+            {
+                StartCaptureFromProcess(process);
+
+                // remove process from the list so it cannot be used by other selectors
+                processes.Remove(process);
+            }
+        }
+
+        private void StartCaptureFromProcess(Process process)
+        {
+            var hwnd = process.MainWindowHandle;
+            try
+            {
+                StartHwndCapture(hwnd);
+            }
+            catch (Exception)
+            {
+                Debug.WriteLine($"Hwnd 0x{hwnd.ToInt32():X8} is not valid for capture!");
+            }
+        }
+
+        private void UnSelectOthers(ScoutSelector scout)
+        {
             foreach (ScoutSelector item in ScoutSelectorPanel.Children)
             {
                 if (item != scout)
                 {
                     item.NotSelected();
                 }
-            }
-
-            var process = scout.SelectedProcess;
-
-            if (process != null)
-            {
-                var hwnd = process.MainWindowHandle;
-                try
-                {
-                    StartHwndCapture(hwnd);
-                }
-                catch (Exception)
-                {
-                    Debug.WriteLine($"Hwnd 0x{hwnd.ToInt32():X8} is not valid for capture!");
-                    scout.ClearSelection();
-                }
-
-                // remove process from the list so it cannot be used by other selectors
-                processes.Remove(process);
             }
         }
 
@@ -523,13 +639,8 @@ namespace GridScout
         {
             var scout = (ScoutSelector)sender;
             itemName = scout.ScoutLabelContent;
-            foreach (ScoutSelector item in ScoutSelectorPanel.Children)
-            {
-                if (item != scout)
-                {
-                    item.NotSelected();
-                }
-            }
+            
+            UnSelectOthers(scout);
 
             Process process = scout.SelectedProcess;
             itemName = process.MainWindowTitle;
@@ -552,13 +663,7 @@ namespace GridScout
 
             itemName = process.MainWindowTitle;
 
-            foreach (ScoutSelector item in ScoutSelectorPanel.Children)
-            {
-                if (item != scout)
-                {
-                    item.NotSelected();
-                }
-            }
+            UnSelectOthers(scout);
 
             var capture = _scoutInfo.Get(itemName).Capture;
             if (capture != null)
@@ -583,7 +688,7 @@ namespace GridScout
 
         private void RefreshButton_Click(object sender, RoutedEventArgs e)
         {
-            RefreshAvailableEveWindowList();
+
         }
     }
 }
