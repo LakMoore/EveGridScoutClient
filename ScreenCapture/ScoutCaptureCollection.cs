@@ -1,5 +1,7 @@
 ﻿using CaptureCore;
+using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using System.Xml.Serialization;
@@ -33,16 +35,30 @@ namespace GridScout
             Entries.RemoveAll(x => x.Key == key);
         }
 
-        public ScoutCapture GetNextInOrder(ScoutCapture entry)
+        public async Task<ScoutCapture> GetNextInOrder(ScoutCapture entry)
         {
             var index = Entries.IndexOf(entry);
+            var startIndex = index;
+            var loopCount = 0;
             ScoutCapture temp;
             do
             {
                 index++;
                 if (index >= Entries.Count) index = 0;
                 temp = Entries[index];
-            } while (temp == null || temp.Capture == null || temp.Capture.GetItem() == null);
+
+                // if we've been all the way round there could be a problem, breath a little
+                if (index == startIndex && loopCount > Entries.Count)
+                {
+                    await Task.Delay(200);
+                }
+                loopCount++;
+            } while (
+                temp == null 
+                || temp.Capture == null 
+                || temp.Capture.GetItem() == null
+                || temp.IsMinimized
+            );
             return temp;
         }
 
@@ -50,6 +66,12 @@ namespace GridScout
 
     public class ScoutCapture
     {
+        [XmlIgnore]
+        private readonly object syncLock = new object();
+
+        [XmlIgnore]
+        private bool _isMinimized;
+
         [XmlElement("Key")]
         public string Key { get; set; }
 
@@ -64,6 +86,24 @@ namespace GridScout
 
         [XmlIgnore]
         public BitmapImage LastImage { get; set; }
+
+        // Synchornised
+
+        [XmlIgnore]
+        public Boolean IsMinimized { 
+            get {
+                lock (syncLock)
+                {
+                    return _isMinimized;
+                }
+            }
+            set {
+                lock (syncLock)
+                {
+                    _isMinimized = value;
+                }
+            }
+        }
 
     }
 }

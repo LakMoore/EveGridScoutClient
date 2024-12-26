@@ -43,11 +43,11 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <StackPanel x:Name="ScoutSelectorPanel" Grid.Row="0" Margin="10">
             </StackPanel>
             <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center">
-                <Button x:Name="RefreshButton" Content="Refresh Scouts" Click="RefreshButton_Click" Width="110" Margin="10, 0" />
                 <Button x:Name="AddButton" Content="Add New Scout" Click="AddButton_Click" Width="110" Margin="10, 0" />
             </StackPanel>
             <StackPanel Grid.Row="2" Margin="10,10,10,10">
@@ -74,6 +74,11 @@
                      AcceptsReturn="True"
                      VerticalScrollBarVisibility="Auto"
                      IsReadOnly="True"/>
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center" Visibility="Hidden">
+                <TextBox x:Name="ValueOne" Margin="5, 0" >5</TextBox>
+                <TextBox x:Name="ValueThree" Margin="5, 0" >10</TextBox>
+                <TextBox x:Name="ValueFour" Margin="5, 0" >0.1</TextBox>
+            </StackPanel>
         </Grid>
 
         <Grid Grid.Column="1" x:Name="CaptureGrid" ScrollViewer.VerticalScrollBarVisibility="Disabled">

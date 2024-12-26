@@ -40,14 +40,33 @@ using System.Collections.Generic;
 using System.Xml.Serialization;
 using System.Net.Http;
 using System.Text;
+using System.Runtime.InteropServices;
 
 namespace GridScout
 {
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WINDOWPLACEMENT
+    {
+        public int length;
+        public int flags;
+        public int showCmd;
+        public System.Drawing.Point ptMinPosition;
+        public System.Drawing.Point ptRestorePosition;
+        public System.Drawing.Rectangle rcNormalPosition;
+    }
+
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
     public partial class MainWindow : Window
     {
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetWindowPlacement(IntPtr hWnd, out WINDOWPLACEMENT lpwndpl);
+
+
         private readonly ObservableCollection<Process> processes = new ObservableCollection<Process>();
         private readonly ScoutCaptureCollection _scoutInfo;
         private readonly TesseractEngine _tesseract;
@@ -74,8 +93,10 @@ namespace GridScout
                 var config = new Dictionary<string, object>
                 {
                     { "tessedit_write_images", true },
+                    { "tessedit_char_blacklist", "@" },
                     //{ "load_system_dawg", false },
-                    //{ "load_freq_dawg", false }
+                    //{ "load_freq_dawg", false },
+                    { "user_words_suffix", "user_words" }
                 };
 
                 _tesseract = new TesseractEngine(TESSDATA_PATH, "eng", EngineMode.LstmOnly, null, config, false);
@@ -101,6 +122,18 @@ namespace GridScout
             ProcessListChanged += RefreshAvailableEveWindowList;
             // Start the process checker on a separate thread
             processChecker = Task.Run(ProcessChecker);
+        }
+
+        public bool IsApplicationMinimized(Process process)
+        {
+            var handle = process.MainWindowHandle;
+            if (handle == IntPtr.Zero)
+            {
+                return false; // No main window handle, cannot determine minimized state
+            }
+
+            GetWindowPlacement(handle, out WINDOWPLACEMENT placement);
+            return placement.showCmd == 2; // 2 indicates the window is minimized
         }
 
         private void InitializeCaptureRectangle()
@@ -189,27 +222,44 @@ namespace GridScout
 
             while (true)
             {
-                var processesList = Process.GetProcessesByName("exefile")
-                .Where(
-                    p =>
-                    //p.MainWindowHandle != IntPtr.Zero &&
-                    p.MainWindowTitle.StartsWith("Eve -", StringComparison.OrdinalIgnoreCase)
-                )
-                .OrderBy(p => p.MainWindowTitle);
-
-                // deep comparison of the two lists
-                if (lastProcesses == null || !ProcessListEquals(processesList.ToList(), lastProcesses))
+                try
                 {
-                    await Dispatcher.InvokeAsync(() =>
+                    var processesList = Process.GetProcessesByName("exefile")
+                        .Where(
+                            p =>
+                            //p.MainWindowHandle != IntPtr.Zero &&
+                            p.MainWindowTitle.StartsWith("Eve -", StringComparison.OrdinalIgnoreCase)
+                        )
+                        .OrderBy(p => p.MainWindowTitle);
+
+                    // deep comparison of the two lists
+                    if (lastProcesses == null || !ProcessListEquals(processesList.ToList(), lastProcesses))
                     {
-                        ProcessListChanged?.Invoke(this, processesList);
-                    });
+                        await Dispatcher.InvokeAsync(() =>
+                        {
+                            ProcessListChanged?.Invoke(this, processesList);
+                        });
+                    }
+
+                    foreach (var process in processesList)
+                    {
+                        var info = _scoutInfo.Get(process.MainWindowTitle);
+                        if (info != null)
+                        {
+                            info.IsMinimized = IsApplicationMinimized(process);
+                        }
+                    }
+
+                    // clone the collection
+                    lastProcesses = processesList.ToList();
+                } catch (Exception e)
+                {
+                    Console.WriteLine("Error in ProcessChecker()\n" + e.Message);
                 }
-                // deep clone the collection
-                lastProcesses = processesList.ToList();
-
-                await Task.Delay(5000);
-
+                finally
+                {
+                    await Task.Delay(5000);
+                }
             }
         }
 
@@ -295,6 +345,8 @@ namespace GridScout
 
                             // update the process stored in the scout object
                             scout.TryGetNewVersionOfProcess();
+
+                            Console.WriteLine("Switched to new process for " + info.Key);
                         }
                         processes.Remove(inList);
                     }
@@ -358,21 +410,21 @@ namespace GridScout
                 return;
             }
 
+            BasicCapture src = (BasicCapture)sender;
+            var thisItemName = src.GetItem().DisplayName;
+            var thisScout = _scoutInfo.Get(thisItemName);
+
             try
             {
                 _isProcessingOcr = true;
 
-                float scale = 5f;
+                float scale = float.Parse(ValueOne.Text);
+                int whSize = int.Parse(ValueThree.Text);
+                float factor = float.Parse(ValueFour.Text);
 
                 using (bitmap)
                 {
-                    BasicCapture src = (BasicCapture)sender;
-                    var thisItemName = src.GetItem().DisplayName;
-                    var thisScout = _scoutInfo.Get(thisItemName);
-
                     src.PauseCapture();
-                    var toResume = _scoutInfo.GetNextInOrder(thisScout);
-                    toResume.Capture.ResumeCapture();
 
                     var margins = thisScout.Margins;
 
@@ -413,11 +465,10 @@ namespace GridScout
                             memoryStream.Seek(0, SeekOrigin.Begin);
 
                             tempPix = Pix.LoadFromMemory(memoryStream.ToArray());
-                            tempPix = tempPix.Scale(scale, scale);
                             tempPix = tempPix.ConvertRGBToGray();
                             tempPix = tempPix.Invert();   // This is essential
-                            tempPix = tempPix.BinarizeSauvola(8, 0.19f, false);  //9, 0.185f, false works with scale = 5f
-                            //tempPix = tempPix.BinarizeSauvola(valueOne, valueTwo, false);  //8, 0.19f, false works
+                            tempPix = tempPix.Scale(scale, scale);  // 5f is good
+                            tempPix = tempPix.BinarizeSauvola(whSize, factor, false);  //10, 0.1, false works with scale = 5f
                         }
                         return (tempBitmap, tempPix);
                     });
@@ -472,6 +523,8 @@ namespace GridScout
             }
             finally
             {
+                var toResume = await _scoutInfo.GetNextInOrder(thisScout);
+                toResume.Capture.ResumeCapture();
                 _isProcessingOcr = false;
             }
         }
@@ -684,11 +737,6 @@ namespace GridScout
             RightTextBox.Value = 0;
             BottomTextBox.Value = 0;
             LeftTextBox.Value = 0;
-        }
-
-        private void RefreshButton_Click(object sender, RoutedEventArgs e)
-        {
-
         }
     }
 }
