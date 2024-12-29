@@ -94,12 +94,14 @@ namespace GridScout
                 {
                     { "tessedit_write_images", true },
                     { "tessedit_char_blacklist", "@" },
+                    { "edges_use_new_outline_complexity", true },
                     //{ "load_system_dawg", false },
                     //{ "load_freq_dawg", false },
+                    { "user_patterns_suffix", "user_patterns" },
                     { "user_words_suffix", "user_words" }
                 };
 
-                _tesseract = new TesseractEngine(TESSDATA_PATH, "eng", EngineMode.LstmOnly, null, config, false);
+                _tesseract = new TesseractEngine(TESSDATA_PATH, "eve", EngineMode.TesseractOnly, null, config, false);
 
             }
             catch (Exception ex)
