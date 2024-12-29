@@ -116,6 +116,9 @@ namespace GridScout
             if (Properties.Settings.Default.CaptureGrids.Length > 0)
             {
                 _scoutInfo = LoadDictionaryFromString(Properties.Settings.Default.CaptureGrids);
+            } else
+            {
+                _scoutInfo = new ScoutCaptureCollection();
             }
         }
 
