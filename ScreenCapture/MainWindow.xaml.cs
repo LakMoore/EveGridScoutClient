@@ -72,7 +72,7 @@ namespace GridScout
         private readonly TesseractEngine _tesseract;
         private EventHandler<IOrderedEnumerable<Process>> ProcessListChanged;
 
-        private const string TESSDATA_PATH = @"./tessdata";
+        private const string TESSDATA_PATH = @".\tessdata";
         private const string SERVER_URL = "https://ffew.space/gridscout/";
         //private const string SERVER_URL = "http://localhost:3000/";
 
