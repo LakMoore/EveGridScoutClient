@@ -87,6 +87,7 @@
       <SubType>Designer</SubType>
     </ApplicationDefinition>
     <Compile Include="ScoutCaptureCollection.cs" />
+    <Compile Include="ScoutMessage.cs" />
     <Compile Include="ScoutSelector.xaml.cs">
       <DependentUpon>ScoutSelector.xaml</DependentUpon>
     </Compile>
@@ -175,6 +176,9 @@
       <Version>4.6.1</Version>
     </PackageReference>
     <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.22621.755" />
+    <PackageReference Include="Newtonsoft.Json">
+      <Version>13.0.3</Version>
+    </PackageReference>
     <PackageReference Include="SharpDX.Direct2D1" Version="4.2.0" />
     <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
     <PackageReference Include="SharpDX.DXGI" Version="4.2.0" />

@@ -24,6 +24,8 @@ namespace CaptureCore
 
         public event EventHandler<Bitmap> FrameCaptured;
 
+        public string Wormhole { get; set; }
+
         public BasicCapture(IDirect3DDevice d, GraphicsCaptureItem i)
         {
             item = i;

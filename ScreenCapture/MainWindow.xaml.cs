@@ -41,6 +41,7 @@ using System.Xml.Serialization;
 using System.Net.Http;
 using System.Text;
 using System.Runtime.InteropServices;
+using Newtonsoft.Json;
 
 namespace GridScout
 {
@@ -73,8 +74,8 @@ namespace GridScout
         private EventHandler<IOrderedEnumerable<Process>> ProcessListChanged;
 
         private const string TESSDATA_PATH = @".\tessdata";
-        private const string SERVER_URL = "https://ffew.space/gridscout/";
-        //private const string SERVER_URL = "http://localhost:3000/";
+        //private const string SERVER_URL = "https://ffew.space/gridscout/";
+        private const string SERVER_URL = "http://localhost:3000/";
 
         private bool _isProcessingOcr;
         private bool _isDragging;
@@ -92,7 +93,6 @@ namespace GridScout
             {
                 var config = new Dictionary<string, object>
                 {
-                    { "tessedit_write_images", true },
                     { "tessedit_char_blacklist", "@" },
                     { "edges_use_new_outline_complexity", true },
                     //{ "load_system_dawg", false },
@@ -100,6 +100,12 @@ namespace GridScout
                     { "user_patterns_suffix", "user_patterns" },
                     { "user_words_suffix", "user_words" }
                 };
+
+                // if we are running from the IDE   
+                if (Debugger.IsAttached)
+                {
+                    config["tessedit_write_images"] = true;
+                }
 
                 _tesseract = new TesseractEngine(TESSDATA_PATH, "eve", EngineMode.TesseractOnly, null, config, false);
 
@@ -346,7 +352,7 @@ namespace GridScout
                             info.Capture = null;
 
                             // Start a new capture
-                            StartCaptureFromProcess(inList);
+                            StartCaptureFromProcess(inList, capture.Wormhole);
 
                             // update the process stored in the scout object
                             scout.TryGetNewVersionOfProcess();
@@ -359,16 +365,16 @@ namespace GridScout
             }
         }
 
-        private void StartHwndCapture(IntPtr hwnd)
+        private void StartHwndCapture(IntPtr hwnd, string wormhole)
         {
             var item = CaptureHelper.CreateItemForWindow(hwnd);
             if (item != null)
             {
-                StartCaptureFromItem(item);
+                StartCaptureFromItem(item, wormhole);
             }
         }
 
-        private void StartCaptureFromItem(GraphicsCaptureItem item)
+        private void StartCaptureFromItem(GraphicsCaptureItem item, string wormhole)
         {
             if (item == null)
             {
@@ -376,7 +382,10 @@ namespace GridScout
             }
 
             var device = Direct3D11Helper.CreateDevice();
-            var capture = new BasicCapture(device, item);
+            var capture = new BasicCapture(device, item)
+            {
+                Wormhole = wormhole
+            };
             capture.FrameCaptured += OnFrameCapturedAsync;
             capture.StartCapture();
 
@@ -506,10 +515,18 @@ namespace GridScout
                             OcrResultsTextBox.ScrollToEnd();
                         }));
 
-                        // send the text to the server URL using a POST request
+                        var message = new ScoutMessage
+                        {
+                            Message = text,
+                            Scout = thisScout.Key.Substring(6),
+                            Wormhole = src.Wormhole
+                        };
+
+                        var json = JsonConvert.SerializeObject(message);
+
                         using (var client = new HttpClient())
                         {
-                            var content = new StringContent(text, Encoding.UTF8, "text/plain");
+                            var content = new StringContent(json, Encoding.UTF8, "application/json");
                             var response = await client.PostAsync(SERVER_URL, content);
                             var body = await response.Content.ReadAsStringAsync();
                             Console.WriteLine(body);
@@ -662,19 +679,19 @@ namespace GridScout
 
             if (process != null)
             {
-                StartCaptureFromProcess(process);
+                StartCaptureFromProcess(process, scout.ScoutLabelContent);
 
                 // remove process from the list so it cannot be used by other selectors
                 processes.Remove(process);
             }
         }
 
-        private void StartCaptureFromProcess(Process process)
+        private void StartCaptureFromProcess(Process process, string wormhole)
         {
             var hwnd = process.MainWindowHandle;
             try
             {
-                StartHwndCapture(hwnd);
+                StartHwndCapture(hwnd, wormhole);
             }
             catch (Exception)
             {
