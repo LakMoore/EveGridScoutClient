@@ -71,11 +71,12 @@ namespace GridScout
         private readonly ObservableCollection<Process> processes = new ObservableCollection<Process>();
         private readonly ScoutCaptureCollection _scoutInfo;
         private readonly TesseractEngine _tesseract;
+        private readonly string SERVER_URL;
         private EventHandler<IOrderedEnumerable<Process>> ProcessListChanged;
+        private EventHandler<Process> MinimisedStateChanged;
 
         private const string TESSDATA_PATH = @".\tessdata";
-        //private const string SERVER_URL = "https://ffew.space/gridscout/";
-        private const string SERVER_URL = "http://localhost:3000/";
+        private const long KEEP_ALIVE_INTERVAL = 5 * TimeSpan.TicksPerMinute; // 5 minutes in ticks
 
         private bool _isProcessingOcr;
         private bool _isDragging;
@@ -105,6 +106,12 @@ namespace GridScout
                 if (Debugger.IsAttached)
                 {
                     config["tessedit_write_images"] = true;
+                    SERVER_URL = "https://ffew.space/gridscout/";
+                    // SERVER_URL = "http://localhost:3000/";
+                }
+                else
+                {
+                    SERVER_URL = "https://ffew.space/gridscout/";
                 }
 
                 _tesseract = new TesseractEngine(TESSDATA_PATH, "eve", EngineMode.TesseractOnly, null, config, false);
@@ -131,6 +138,8 @@ namespace GridScout
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             ProcessListChanged += RefreshAvailableEveWindowList;
+            MinimisedStateChanged += UpdateMinimizedState;
+
             // Start the process checker on a separate thread
             processChecker = Task.Run(ProcessChecker);
         }
@@ -257,7 +266,15 @@ namespace GridScout
                         var info = _scoutInfo.Get(process.MainWindowTitle);
                         if (info != null)
                         {
+                            var wasMinimized = info.IsMinimized;
                             info.IsMinimized = IsApplicationMinimized(process);
+                            if (wasMinimized != info.IsMinimized)
+                            {
+                                await Dispatcher.InvokeAsync(() =>
+                                {
+                                    MinimisedStateChanged?.Invoke(this, process);
+                                });
+                            }
                         }
                     }
 
@@ -291,6 +308,22 @@ namespace GridScout
             }
 
             return true;
+        }
+
+        private void UpdateMinimizedState(object sender, Process args)
+        {
+            foreach(ScoutSelector scout in ScoutSelectorPanel.Children)
+            {
+                if (scout.SelectedProcess?.Id == args.Id)
+                {
+                    var info = _scoutInfo.Get(args.MainWindowTitle);
+                    if (info != null)
+                    {
+                        scout.SetMinimised(info.IsMinimized);
+                    }
+                }
+            }
+
         }
 
         private void RefreshAvailableEveWindowList(object sender, IOrderedEnumerable<Process> args)
@@ -330,6 +363,9 @@ namespace GridScout
             {
                 if (scout.SelectedProcess != null)
                 {
+                    var info = _scoutInfo.Get(scout.SelectedProcess.MainWindowTitle);
+                    var capture = info.Capture;
+
                     var inList = processes.FirstOrDefault(
                         x => x.MainWindowTitle == scout.SelectedProcess.MainWindowTitle
                     );
@@ -338,8 +374,6 @@ namespace GridScout
                         if (inList.Id != scout.SelectedProcess.Id)
                         {
                             // We've found a new process with a matching title!!
-                            var info = _scoutInfo.Get(inList.MainWindowTitle);
-                            var capture = info.Capture;
 
                             // Stop the old capture
                             if (capture != null)
@@ -431,6 +465,7 @@ namespace GridScout
             try
             {
                 _isProcessingOcr = true;
+                src.PauseCapture();
 
                 float scale = float.Parse(ValueOne.Text);
                 int whSize = int.Parse(ValueThree.Text);
@@ -438,7 +473,6 @@ namespace GridScout
 
                 using (bitmap)
                 {
-                    src.PauseCapture();
 
                     var margins = thisScout.Margins;
 
@@ -511,6 +545,13 @@ namespace GridScout
 
                         await Dispatcher.BeginInvoke(new Action(() =>
                         {
+                            foreach(ScoutSelector scout in ScoutSelectorPanel.Children)
+                            {
+                                if (scout.SelectedProcess?.MainWindowTitle == thisScout.Key)
+                                {
+                                    scout.HasWormhole(text.Contains("Wormhole "));
+                                }
+                            }
                             OcrResultsTextBox.Text = text;
                             OcrResultsTextBox.ScrollToEnd();
                         }));
@@ -532,8 +573,32 @@ namespace GridScout
                             Console.WriteLine(body);
                         }
 
+                        thisScout.LastReportTime = DateTime.Now.Ticks;
+                        thisScout.LastPix = pix.Clone();
+                    } else if (DateTime.Now.Ticks - thisScout.LastReportTime > KEEP_ALIVE_INTERVAL)
+                    {
+                        // send a keep-alive every 5 mins
+
+                        var message = new ScoutMessage
+                        {
+                            Message = "",
+                            Scout = thisScout.Key.Substring(6),
+                            Wormhole = src.Wormhole
+                        };
+
+                        var json = JsonConvert.SerializeObject(message);
+
+                        using (var client = new HttpClient())
+                        {
+                            var content = new StringContent(json, Encoding.UTF8, "application/json");
+                            var response = await client.PostAsync(SERVER_URL, content);
+                            var body = await response.Content.ReadAsStringAsync();
+                            Console.WriteLine(body);
+                        }
+                        
+                        thisScout.LastReportTime = DateTime.Now.Ticks;
+
                     }
-                    thisScout.LastPix = pix.Clone();
                 }
             }
             catch (Exception ex)
@@ -705,7 +770,7 @@ namespace GridScout
             {
                 if (item != scout)
                 {
-                    item.NotSelected();
+                    item.SetSelected(false);
                 }
             }
         }

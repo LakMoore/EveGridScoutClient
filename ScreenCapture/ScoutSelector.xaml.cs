@@ -20,6 +20,10 @@ namespace GridScout
         public event EventHandler StopScout;
         public event EventHandler DeleteScout;
         private Process _process;
+        private bool _awaitingFrame;
+        private bool _minimised;
+        private bool _selected;
+        private bool _hasWormhole;
 
         public ScoutSelector()
         {
@@ -35,9 +39,57 @@ namespace GridScout
             set { ScoutLabel.Content = value; }
         }
 
-        public void NotSelected()
+        private void UpdateStatus()
         {
+            if (_process != null)
+            {
+                if (_minimised)
+                {
+                    this.Background = new SolidColorBrush(Colors.Red);
+                    return;
+                }
+                //if (_awaitingFrame)
+                //{
+                //    this.Background = new SolidColorBrush(Colors.OrangeRed);
+                //    return;
+                //}
+                if (!_hasWormhole)
+                {
+                    this.Background = new SolidColorBrush(Colors.Orange);
+                    return;
+                }
+                if (_selected)
+                {
+                    this.Background = new SolidColorBrush(Colors.LightGray);
+                    return;
+                }
+            }
             this.Background = new SolidColorBrush(Colors.Transparent);
+
+        }
+
+        public void SetSelected(bool selected)
+        {
+            _selected = selected;
+            UpdateStatus();
+        }
+
+        public void SetAwaitingFrame(bool awaitingFrame)
+        {
+            _awaitingFrame = awaitingFrame;
+            UpdateStatus();
+        }
+
+        public void SetMinimised(bool minimised)
+        {
+            _minimised = minimised;
+            UpdateStatus();
+        }
+
+        public void HasWormhole(bool hasWormhole)
+        {
+            _hasWormhole = hasWormhole;
+            UpdateStatus();
         }
 
         public void SetProcesses(ObservableCollection<Process> processes)
@@ -69,7 +121,7 @@ namespace GridScout
 
         private void ShowButton_Click(object sender, RoutedEventArgs e)
         {
-            this.Background = new SolidColorBrush(Colors.LightGray);
+            this.SetSelected(true);
             ShowScout?.Invoke(this, EventArgs.Empty);
         }
 
@@ -84,7 +136,7 @@ namespace GridScout
             DeleteButton.Visibility = Visibility.Visible;
             StopButton.Visibility = Visibility.Hidden;
             ShowButton.Visibility = Visibility.Hidden;
-            this.Background = new SolidColorBrush(Colors.Transparent);
+            UpdateStatus();
         }
 
         private void ClientSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -100,7 +152,8 @@ namespace GridScout
                 DeleteButton.Visibility = Visibility.Hidden;
                 StopButton.Visibility = Visibility.Visible;
                 ShowButton.Visibility = Visibility.Visible;
-                this.Background = new SolidColorBrush(Colors.LightGray);
+                _selected = true;
+                UpdateStatus();
                 ScoutSelected?.Invoke(this, EventArgs.Empty);
             }
         }

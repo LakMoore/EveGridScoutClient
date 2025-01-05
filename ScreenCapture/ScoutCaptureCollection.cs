@@ -85,6 +85,9 @@ namespace GridScout
         public Pix LastPix { get; set; }
 
         [XmlIgnore]
+        public long LastReportTime { get; set; }
+
+        [XmlIgnore]
         public BitmapImage LastImage { get; set; }
 
         // Synchornised

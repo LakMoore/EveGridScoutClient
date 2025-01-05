@@ -21,6 +21,7 @@ namespace CaptureCore
         private readonly Device d3dDevice;
 
         private bool _paused;
+        private bool _awaitingFrame;
 
         public event EventHandler<Bitmap> FrameCaptured;
 
@@ -60,9 +61,15 @@ namespace CaptureCore
             return item;
         }
 
+        public bool IsAwaitingFrame()
+        {
+            return _awaitingFrame && !_paused;
+        }
+
         public void StartCapture()
         {
             _paused = false;
+            _awaitingFrame = true;
             framePool.FrameArrived += OnFrameArrived;
             session.StartCapture();
         }
@@ -70,16 +77,19 @@ namespace CaptureCore
         public void PauseCapture()
         {
             _paused = true;
+            _awaitingFrame = false;
         }
 
         public void ResumeCapture()
         {
             _paused = false;
+            _awaitingFrame = true;
         }
 
         public void StopCapture()
         {
             _paused = true;
+            _awaitingFrame = false;
             framePool.FrameArrived -= OnFrameArrived;
             session?.Dispose();
             session = null;
@@ -97,6 +107,8 @@ namespace CaptureCore
                     Console.WriteLine("Null Frame!");
                     return;
                 }
+
+                _awaitingFrame = false;
 
                 if (_paused)
                 {
