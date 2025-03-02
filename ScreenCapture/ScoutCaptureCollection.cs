@@ -82,9 +82,6 @@ namespace GridScout
         public BasicCapture Capture { get; set; }
 
         [XmlIgnore]
-        public Pix LastPix { get; set; }
-
-        [XmlIgnore]
         public Pix LastCapture { get; set; }
 
         [XmlIgnore]

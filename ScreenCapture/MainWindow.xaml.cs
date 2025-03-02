@@ -530,11 +530,8 @@ namespace GridScout
                         CapturedImage.Source = bitmapImage;
                     }
 
-                    var stableImage = pix.Equals(thisScout.LastPix);
-                    thisScout.LastPix = pix.Clone();
-
                     // Check if the bitmap has changed
-                    if (stableImage && !pix.Equals(thisScout.LastCapture))
+                    if (!pix.Equals(thisScout.LastCapture))
                     {
                         // Run OCR processing on a background thread
                         var task = Task.Run(async () =>
