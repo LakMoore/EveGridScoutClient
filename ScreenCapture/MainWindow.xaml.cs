@@ -507,16 +507,18 @@ namespace GridScout
                                 using (var g = Graphics.FromImage(croppedBitmap))
                                 {
                                     g.DrawImage(bitmap, new Rectangle(0, 0, croppedBitmap.Width, croppedBitmap.Height), cropRect, GraphicsUnit.Pixel);
+                                    EveBinarize(croppedBitmap);
                                 }
                                 croppedBitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Bmp);
                             }
                             memoryStream.Seek(0, SeekOrigin.Begin);
 
                             tempPix = Pix.LoadFromMemory(memoryStream.ToArray());
+
                             tempPix = tempPix.ConvertRGBToGray();
-                            tempPix = tempPix.Invert();   // This is essential
+                            //tempPix = tempPix.Invert();   // This is essential
                             tempPix = tempPix.Scale(scale, scale);  // 5f is good
-                            tempPix = tempPix.BinarizeSauvola(whSize, factor, false);  //10, 0.1, false works with scale = 5f
+                            //tempPix = tempPix.BinarizeSauvola(whSize, factor, false);  //10, 0.1, false works with scale = 5f
                         }
                         return (tempBitmap, tempPix);
                     });
@@ -619,6 +621,27 @@ namespace GridScout
                 var toResume = await _scoutInfo.GetNextInOrder(thisScout);
                 toResume.Capture.ResumeCapture();
                 _isCapturingImage = false;
+            }
+        }
+
+        private void EveBinarize(Bitmap bitmapInput)
+        {
+            var whiteLimit = 195;
+            for (int x = 0; x < bitmapInput.Width; x++)
+            {
+                for (int y = 0; y < bitmapInput.Height; y++)
+                {
+                    Color pixelColor = bitmapInput.GetPixel(x, y);
+                    // if the pixel is white, set it to black, otherwise set it to white
+                    Color newColor = Color.FromArgb(
+                        pixelColor.A,
+                        pixelColor.R > whiteLimit ? 0 : 255,
+                        pixelColor.G > whiteLimit ? 0 : 255,
+                        pixelColor.B > whiteLimit ? 0 : 255
+                    );
+
+                    bitmapInput.SetPixel(x, y, newColor);
+                }
             }
         }
 
