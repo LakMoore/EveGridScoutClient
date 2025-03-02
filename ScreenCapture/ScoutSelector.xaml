@@ -12,6 +12,7 @@
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition x:Name="ColumnThree" Width="0" />
+            <ColumnDefinition x:Name="ColumnFour" Width="0" />
         </Grid.ColumnDefinitions>
         <Label x:Name="ScoutLabel" Margin="0 10 0 10" Grid.Column="0" >#A</Label>
         <ComboBox Visibility="Visible" Grid.Column="1" x:Name="ClientSelector" Margin="5 10" SelectionChanged="ClientSelector_SelectionChanged">
@@ -30,6 +31,7 @@
         <Label Visibility="Hidden" x:Name="ClientLabel" Margin="10" Grid.Column="1" >Lak Moore</Label>
         <Button x:Name="DeleteButton" Padding="5 0" Margin="5 10" Grid.Column="2" Visibility="Visible" Click="DeleteButton_Click">Delete</Button>
         <Button x:Name="StopButton" Padding="5 0" Margin="5 10" Grid.Column="2" Visibility="Hidden" Click="StopButton_Click">Stop</Button>
-        <Button x:Name="ShowButton" Padding="5 0" Margin="5 10" Grid.Column="3" Visibility="Hidden" Click="ShowButton_Click">Show</Button>
+        <Button x:Name="FocusButton" Padding="5 0" Margin="5 10" Grid.Column="3" Visibility="Hidden" Click="FocusButton_Click">Focus</Button>
+        <Button x:Name="ShowButton" Padding="5 0" Margin="5 10" Grid.Column="4" Visibility="Hidden" Click="ShowButton_Click">Show</Button>
     </Grid>
 </UserControl>

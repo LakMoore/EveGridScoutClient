@@ -2,17 +2,22 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
 namespace GridScout
 {
+    
     /// <summary>
     /// Interaction logic for ScoutSelector.xaml
     /// </summary>
     public partial class ScoutSelector : UserControl
     {
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SetForegroundWindow(IntPtr hWnd);
 
         // ScoutSelected event
         public event EventHandler ScoutSelected;
@@ -133,9 +138,11 @@ namespace GridScout
             ClientSelector.SelectedIndex = -1;
             ClientLabel.Visibility = Visibility.Hidden;
             ColumnThree.Width = new GridLength(0);
+            ColumnFour.Width = new GridLength(0);
             DeleteButton.Visibility = Visibility.Visible;
             StopButton.Visibility = Visibility.Hidden;
             ShowButton.Visibility = Visibility.Hidden;
+            FocusButton.Visibility = Visibility.Hidden;
             UpdateStatus();
         }
 
@@ -149,9 +156,11 @@ namespace GridScout
                 // remove "Eve - " from the start of the scout name
                 ClientLabel.Content = _process.MainWindowTitle.Substring(6);
                 ColumnThree.Width = GridLength.Auto;
+                ColumnFour.Width = GridLength.Auto;
                 DeleteButton.Visibility = Visibility.Hidden;
                 StopButton.Visibility = Visibility.Visible;
                 ShowButton.Visibility = Visibility.Visible;
+                FocusButton.Visibility = Visibility.Visible; 
                 _selected = true;
                 UpdateStatus();
                 ScoutSelected?.Invoke(this, EventArgs.Empty);
@@ -161,6 +170,18 @@ namespace GridScout
         private void DeleteButton_Click(object sender, RoutedEventArgs e)
         {
             DeleteScout?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void FocusButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_process != null)
+            {
+                var handle = _process.MainWindowHandle;
+                if (handle != IntPtr.Zero)
+                {
+                    SetForegroundWindow(handle);
+                }
+            }
         }
     }
 }

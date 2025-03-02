@@ -528,53 +528,59 @@ namespace GridScout
                         CapturedImage.Source = bitmapImage;
                     }
 
+                    var stableImage = pix.Equals(thisScout.LastPix);
+                    thisScout.LastPix = pix.Clone();
+
                     // Check if the bitmap has changed
-                    if (!pix.Equals(thisScout.LastPix))
+                    if (stableImage && !pix.Equals(thisScout.LastCapture))
                     {
                         // Run OCR processing on a background thread
-                        var text = await Task.Run(() =>
+                        var task = Task.Run(async () =>
                         {
+                            var text = "";
                             using (var page = _tesseract.Process(
                                 pix,
                                 PageSegMode.SingleBlock
                             ))
                             {
-                                return page.GetText();
+                                text = page.GetText();
+
+                                await Dispatcher.BeginInvoke(new Action(() =>
+                                {
+                                    foreach(ScoutSelector scout in ScoutSelectorPanel.Children)
+                                    {
+                                        if (scout.SelectedProcess?.MainWindowTitle == thisScout.Key)
+                                        {
+                                            scout.HasWormhole(text.Contains("Wormhole "));
+                                        }
+                                    }
+                                    OcrResultsTextBox.Text = text;
+                                    OcrResultsTextBox.ScrollToEnd();
+                                }));
+
+                                var message = new ScoutMessage
+                                {
+                                    Message = text,
+                                    Scout = thisScout.Key.Substring(6),
+                                    Wormhole = src.Wormhole
+                                };
+
+                                var json = JsonConvert.SerializeObject(message);
+
+                                using (var client = new HttpClient())
+                                {
+                                    var content = new StringContent(json, Encoding.UTF8, "application/json");
+                                    var response = await client.PostAsync(SERVER_URL, content);
+                                    var body = await response.Content.ReadAsStringAsync();
+                                    Console.WriteLine(body);
+                                }
+
+                                thisScout.LastReportTime = DateTime.Now.Ticks;
+                                thisScout.LastCapture = pix.Clone();
                             }
                         });
 
-                        await Dispatcher.BeginInvoke(new Action(() =>
-                        {
-                            foreach(ScoutSelector scout in ScoutSelectorPanel.Children)
-                            {
-                                if (scout.SelectedProcess?.MainWindowTitle == thisScout.Key)
-                                {
-                                    scout.HasWormhole(text.Contains("Wormhole "));
-                                }
-                            }
-                            OcrResultsTextBox.Text = text;
-                            OcrResultsTextBox.ScrollToEnd();
-                        }));
 
-                        var message = new ScoutMessage
-                        {
-                            Message = text,
-                            Scout = thisScout.Key.Substring(6),
-                            Wormhole = src.Wormhole
-                        };
-
-                        var json = JsonConvert.SerializeObject(message);
-
-                        using (var client = new HttpClient())
-                        {
-                            var content = new StringContent(json, Encoding.UTF8, "application/json");
-                            var response = await client.PostAsync(SERVER_URL, content);
-                            var body = await response.Content.ReadAsStringAsync();
-                            Console.WriteLine(body);
-                        }
-
-                        thisScout.LastReportTime = DateTime.Now.Ticks;
-                        thisScout.LastPix = pix.Clone();
                     } else if (DateTime.Now.Ticks - thisScout.LastReportTime > KEEP_ALIVE_INTERVAL)
                     {
                         // send a keep-alive every 5 mins
@@ -614,11 +620,6 @@ namespace GridScout
                 toResume.Capture.ResumeCapture();
                 _isProcessingOcr = false;
             }
-        }
-
-        private void CapturedImage_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            ReDrawCaptureRectangle();
         }
 
         private void MarginValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
@@ -824,6 +825,11 @@ namespace GridScout
             RightTextBox.Value = 0;
             BottomTextBox.Value = 0;
             LeftTextBox.Value = 0;
+        }
+
+        private void myCanvas_LayoutUpdated(object sender, EventArgs e)
+        {
+            ReDrawCaptureRectangle();
         }
     }
 }
