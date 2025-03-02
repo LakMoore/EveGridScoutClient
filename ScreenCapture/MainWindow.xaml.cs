@@ -78,7 +78,7 @@ namespace GridScout
         private const string TESSDATA_PATH = @".\tessdata";
         private const long KEEP_ALIVE_INTERVAL = 5 * TimeSpan.TicksPerMinute; // 5 minutes in ticks
 
-        private bool _isProcessingOcr;
+        private bool _isCapturingImage;
         private bool _isDragging;
         private double lastMouseX;
         private double lastMouseY;
@@ -452,7 +452,7 @@ namespace GridScout
             if (_tesseract == null) return;
 
             // Check if we're already processing
-            if (_isProcessingOcr || _isDragging)
+            if (_isCapturingImage || _isDragging)
             {
                 bitmap.Dispose();
                 return;
@@ -464,7 +464,7 @@ namespace GridScout
 
             try
             {
-                _isProcessingOcr = true;
+                _isCapturingImage = true;
                 src.PauseCapture();
 
                 float scale = float.Parse(ValueOne.Text);
@@ -618,7 +618,7 @@ namespace GridScout
             {
                 var toResume = await _scoutInfo.GetNextInOrder(thisScout);
                 toResume.Capture.ResumeCapture();
-                _isProcessingOcr = false;
+                _isCapturingImage = false;
             }
         }
 
