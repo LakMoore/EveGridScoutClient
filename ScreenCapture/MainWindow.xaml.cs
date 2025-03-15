@@ -94,10 +94,11 @@ namespace GridScout
             {
                 var config = new Dictionary<string, object>
                 {
-                    { "tessedit_char_blacklist", "@" },
+                    { "tessedit_char_blacklist", "@|" },
                     { "edges_use_new_outline_complexity", true },
                     //{ "load_system_dawg", false },
                     //{ "load_freq_dawg", false },
+                    { "user_defined_dpi", "300" },
                     { "user_patterns_suffix", "user_patterns" },
                     { "user_words_suffix", "user_words" }
                 };
@@ -507,7 +508,7 @@ namespace GridScout
                                 using (var g = Graphics.FromImage(croppedBitmap))
                                 {
                                     g.DrawImage(bitmap, new Rectangle(0, 0, croppedBitmap.Width, croppedBitmap.Height), cropRect, GraphicsUnit.Pixel);
-                                    EveBinarize(croppedBitmap);
+                                    //EveBinarize(croppedBitmap);
                                 }
                                 croppedBitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Bmp);
                             }
@@ -516,9 +517,9 @@ namespace GridScout
                             tempPix = Pix.LoadFromMemory(memoryStream.ToArray());
 
                             tempPix = tempPix.ConvertRGBToGray();
-                            //tempPix = tempPix.Invert();   // This is essential
-                            tempPix = tempPix.Scale(scale, scale);  // 5f is good
-                            //tempPix = tempPix.BinarizeSauvola(whSize, factor, false);  //10, 0.1, false works with scale = 5f
+                            tempPix = tempPix.Invert();   // This is essential
+                            tempPix = tempPix.Scale(scale, scale);  // 96 dpi * 3.125f = 300dpi
+                            tempPix = tempPix.BinarizeSauvola(whSize, factor, false);  //10, 0.1, false works with scale = 5f
                         }
                         return (tempBitmap, tempPix);
                     });
@@ -623,21 +624,25 @@ namespace GridScout
 
         private void EveBinarize(Bitmap bitmapInput)
         {
-            var whiteLimit = 195;
+            var whiteLimit = 160;
             for (int x = 0; x < bitmapInput.Width; x++)
             {
                 for (int y = 0; y < bitmapInput.Height; y++)
                 {
                     Color pixelColor = bitmapInput.GetPixel(x, y);
                     // if the pixel is white, set it to black, otherwise set it to white
-                    Color newColor = Color.FromArgb(
-                        pixelColor.A,
-                        pixelColor.R > whiteLimit ? 0 : 255,
-                        pixelColor.G > whiteLimit ? 0 : 255,
-                        pixelColor.B > whiteLimit ? 0 : 255
-                    );
-
-                    bitmapInput.SetPixel(x, y, newColor);
+                    if(
+                        pixelColor.R > whiteLimit 
+                        && pixelColor.G > whiteLimit 
+                        && pixelColor.B > whiteLimit
+                    )
+                    {
+                        bitmapInput.SetPixel(x, y, Color.Black);
+                    }
+                    else
+                    {   
+                        bitmapInput.SetPixel(x, y, Color.White);
+                    }
                 }
             }
         }
