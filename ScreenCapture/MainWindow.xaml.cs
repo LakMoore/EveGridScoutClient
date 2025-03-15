@@ -95,7 +95,7 @@ namespace GridScout
                 var config = new Dictionary<string, object>
                 {
                     { "tessedit_char_blacklist", "@|" },
-                    { "edges_use_new_outline_complexity", true },
+                    //{ "edges_use_new_outline_complexity", true },
                     //{ "load_system_dawg", false },
                     //{ "load_freq_dawg", false },
                     { "user_defined_dpi", "300" },
