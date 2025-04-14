@@ -72,7 +72,7 @@ namespace GridScout
         private readonly ScoutCaptureCollection _scoutInfo;
         private readonly TesseractEngine _tesseract;
         private readonly string SERVER_URL;
-        private EventHandler<IOrderedEnumerable<Process>> ProcessListChanged;
+        private EventHandler<List<Process>> ProcessListChanged;
         private EventHandler<Process> MinimisedStateChanged;
 
         private const string TESSDATA_PATH = @".\tessdata";
@@ -84,6 +84,7 @@ namespace GridScout
         private double lastMouseY;
         private string itemName = "";
         private Task processChecker;
+        private WasapiLoopbackCapture audioCapture;
 
         public MainWindow()
         {
@@ -95,10 +96,11 @@ namespace GridScout
                 var config = new Dictionary<string, object>
                 {
                     { "tessedit_char_blacklist", "@|" },
-                    //{ "edges_use_new_outline_complexity", true },
+                    { "edges_use_new_outline_complexity", true },
                     //{ "load_system_dawg", false },
                     //{ "load_freq_dawg", false },
-                    { "user_defined_dpi", "300" },
+                    { "user_defined_dpi", "288" },  //x3 scale
+                    // { "user_defined_dpi", "384" },   //x4 scale
                     { "user_patterns_suffix", "user_patterns" },
                     { "user_words_suffix", "user_words" }
                 };
@@ -107,8 +109,8 @@ namespace GridScout
                 if (Debugger.IsAttached)
                 {
                     config["tessedit_write_images"] = true;
-                    SERVER_URL = "https://ffew.space/gridscout/";
-                    // SERVER_URL = "http://localhost:3000/";
+                    // SERVER_URL = "https://ffew.space/gridscout/";
+                    SERVER_URL = "http://localhost:3000/";
                 }
                 else
                 {
@@ -251,10 +253,10 @@ namespace GridScout
                             //p.MainWindowHandle != IntPtr.Zero &&
                             p.MainWindowTitle.StartsWith("Eve -", StringComparison.OrdinalIgnoreCase)
                         )
-                        .OrderBy(p => p.MainWindowTitle);
+                        .OrderBy(p => p.MainWindowTitle).ToList();
 
                     // deep comparison of the two lists
-                    if (lastProcesses == null || !ProcessListEquals(processesList.ToList(), lastProcesses))
+                    if (lastProcesses == null || !ProcessListEquals(processesList, lastProcesses))
                     {
                         await Dispatcher.InvokeAsync(() =>
                         {
@@ -280,7 +282,11 @@ namespace GridScout
                     }
 
                     // clone the collection
-                    lastProcesses = processesList.ToList();
+                    lastProcesses = new List<Process>();
+                    foreach (var process in processesList)
+                    {
+                        lastProcesses.Add(process);
+                    }
                 } catch (Exception e)
                 {
                     Console.WriteLine("Error in ProcessChecker()\n" + e.Message);
@@ -327,7 +333,7 @@ namespace GridScout
 
         }
 
-        private void RefreshAvailableEveWindowList(object sender, IOrderedEnumerable<Process> args)
+        private void RefreshAvailableEveWindowList(object sender, List<Process> args)
         {
             var processesList = args;
 
@@ -387,7 +393,7 @@ namespace GridScout
                             info.Capture = null;
 
                             // Start a new capture
-                            StartCaptureFromProcess(inList, capture.Wormhole);
+                            StartCaptureFromProcess(inList, scout.ScoutLabelContent);
 
                             // update the process stored in the scout object
                             scout.TryGetNewVersionOfProcess();
@@ -463,6 +469,12 @@ namespace GridScout
             var thisItemName = src.GetItem().DisplayName;
             var thisScout = _scoutInfo.Get(thisItemName);
 
+            if (thisScout == null)
+            {
+                bitmap.Dispose();
+                return;
+            }
+
             try
             {
                 _isCapturingImage = true;
@@ -477,11 +489,17 @@ namespace GridScout
 
                     var margins = thisScout.Margins;
 
+                    var width = bitmap.Width - (int)(margins.Right + margins.Left) + whSize;
+                    width = (int)Math.Floor(width / (double)whSize) * whSize;
+
+                    var height = bitmap.Height - (int)(margins.Bottom + margins.Top) + whSize;
+                    height = (int)Math.Floor(height / (double)whSize) * whSize;
+
                     var cropRect = new Rectangle(
-                        (int)margins.Left,
-                        (int)margins.Top,
-                        bitmap.Width - (int)(margins.Right + margins.Left),
-                        bitmap.Height - (int)(margins.Bottom + margins.Top)
+                        (int)margins.Left - whSize / 2,
+                        (int)margins.Top - whSize / 2,
+                        width,
+                        height
                     );
 
                     (var bitmapImage, var pix) = await Task.Run(() =>
@@ -503,12 +521,11 @@ namespace GridScout
                         Pix tempPix;
                         using (var memoryStream = new MemoryStream())
                         {
-                            using (var croppedBitmap = new Bitmap(cropRect.Width, cropRect.Height))
+                            using (Bitmap croppedBitmap = new Bitmap(cropRect.Width, cropRect.Height))
                             {
                                 using (var g = Graphics.FromImage(croppedBitmap))
                                 {
                                     g.DrawImage(bitmap, new Rectangle(0, 0, croppedBitmap.Width, croppedBitmap.Height), cropRect, GraphicsUnit.Pixel);
-                                    //EveBinarize(croppedBitmap);
                                 }
                                 croppedBitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Bmp);
                             }
@@ -518,9 +535,10 @@ namespace GridScout
 
                             tempPix = tempPix.ConvertRGBToGray();
                             tempPix = tempPix.Invert();   // This is essential
-                            tempPix = tempPix.Scale(scale, scale);  // 96 dpi * 3.125f = 300dpi
-                            tempPix = tempPix.BinarizeSauvola(whSize, factor, false);  //10, 0.1, false works with scale = 5f
+                            tempPix = tempPix.Scale(scale, scale);  // 96 dpi * 4f = 384dpi  (which we set in the config)
+                            tempPix = tempPix.BinarizeSauvola(whSize, factor, false);  //14, 0.2, false works with scale = 4f
                         }
+
                         return (tempBitmap, tempPix);
                     });
 
@@ -534,15 +552,51 @@ namespace GridScout
                     // Check if the bitmap has changed
                     if (!pix.Equals(thisScout.LastCapture))
                     {
-                        // Run OCR processing on a background thread
+                        // Run OCR processing on a background thread and don't wait for it to finish
                         var task = Task.Run(async () =>
                         {
                             var text = "";
+                            //var minx = 0;
+                            //var miny = 0;
+                            //var maxx = 0;
+                            //var maxy = 0;
+                            //var textFound = false;
+                            //// OCR it once
+                            //using (var page = _tesseract.Process(
+                            //    pix,
+                            //    PageSegMode.SingleBlock
+                            //))
+                            //{
+                            //    Console.Write(page.GetTsvText(1));
+                            //    minx = page.RegionOfInterest.Width;
+                            //    miny = page.RegionOfInterest.Height;
+                            //    maxx = 0;
+                            //    maxy = 0;
+                            //    foreach (var region in page.GetSegmentedRegions(PageIteratorLevel.Word))
+                            //    {
+                            //        Console.WriteLine(region.ToString()); 
+                            //        textFound = true;
+                            //        if (region.X < minx) minx = region.X;
+                            //        if (region.Y < miny) miny = region.Y;
+                            //        if (region.X + region.Width > maxx) maxx = region.X + region.Width;
+                            //        if (region.Y + region.Height > maxy) maxy = region.Y + region.Height;
+                            //    }
+                            //    minx -= whSize;
+                            //    miny -= whSize;
+                            //    maxx += whSize;
+                            //    maxy += whSize;
+                            //    Console.WriteLine("REGION OF INTEREST: " + minx + ", " + miny + ", " + maxx + ", " + maxy);
+                            //}
+
+                            // third time's a charm
                             using (var page = _tesseract.Process(
                                 pix,
+                                //Tesseract.Rect.FromCoords(minx, miny, maxx, maxy),
                                 PageSegMode.SingleBlock
                             ))
                             {
+                                Console.Write(page.GetTsvText(1));
+
                                 text = page.GetText();
 
                                 await Dispatcher.BeginInvoke(new Action(() =>
@@ -619,31 +673,6 @@ namespace GridScout
                 var toResume = await _scoutInfo.GetNextInOrder(thisScout);
                 toResume.Capture.ResumeCapture();
                 _isCapturingImage = false;
-            }
-        }
-
-        private void EveBinarize(Bitmap bitmapInput)
-        {
-            var whiteLimit = 160;
-            for (int x = 0; x < bitmapInput.Width; x++)
-            {
-                for (int y = 0; y < bitmapInput.Height; y++)
-                {
-                    Color pixelColor = bitmapInput.GetPixel(x, y);
-                    // if the pixel is white, set it to black, otherwise set it to white
-                    if(
-                        pixelColor.R > whiteLimit 
-                        && pixelColor.G > whiteLimit 
-                        && pixelColor.B > whiteLimit
-                    )
-                    {
-                        bitmapInput.SetPixel(x, y, Color.Black);
-                    }
-                    else
-                    {   
-                        bitmapInput.SetPixel(x, y, Color.White);
-                    }
-                }
             }
         }
 

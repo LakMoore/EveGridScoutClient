@@ -75,9 +75,9 @@
                      VerticalScrollBarVisibility="Auto"
                      IsReadOnly="True"/>
             <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center" Visibility="Hidden">
-                <TextBox x:Name="ValueOne" Margin="5, 0" >3.125</TextBox>
-                <TextBox x:Name="ValueThree" Margin="5, 0" >12</TextBox>
-                <TextBox x:Name="ValueFour" Margin="5, 0" >0.205</TextBox>
+                <TextBox x:Name="ValueOne" Margin="5, 0" >3</TextBox>
+                <TextBox x:Name="ValueThree" Margin="5, 0" >8</TextBox>
+                <TextBox x:Name="ValueFour" Margin="5, 0" >0.1</TextBox>
             </StackPanel>
         </Grid>
 
