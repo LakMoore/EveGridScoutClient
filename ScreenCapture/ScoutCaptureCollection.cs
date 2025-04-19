@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Media.Imaging;
 using System.Xml.Serialization;
 using Tesseract;
+using NAudio.Wave;
 
 namespace GridScout
 {
@@ -20,9 +21,25 @@ namespace GridScout
             return Entries.Find(x => x.Key == key) != null;
         }
 
+        public ScoutCapture CreateNew(string key)
+        {
+            return new ScoutCapture()
+            {
+                Key = key,
+                Margins = new Thickness()
+            };
+        }
+
         public ScoutCapture Get(string key)
         {
             return Entries.Find(x => x.Key == key);
+        }
+
+        public ScoutCapture GetOrDefault(string key)
+        {
+            if (Entries == null || Entries.Count == 0) return CreateNew(key);
+            var entry = Entries.Find(x => x.Key == key);
+            return entry ?? CreateNew(key);
         }
 
         public void Add(ScoutCapture entry)
@@ -82,6 +99,9 @@ namespace GridScout
         public BasicCapture Capture { get; set; }
 
         [XmlIgnore]
+        public WasapiLoopbackCapture AudioCapture { get; set; }
+
+        [XmlIgnore]
         public Pix LastCapture { get; set; }
 
         [XmlIgnore]
@@ -108,5 +128,19 @@ namespace GridScout
             }
         }
 
+        public void StopCapture()
+        {
+            if (AudioCapture != null)
+            {
+                AudioCapture.StopRecording();
+                AudioCapture.Dispose();
+                AudioCapture = null;
+            }
+            if (Capture != null)
+            {
+                Capture.Dispose();
+                Capture = null;
+            }
+        }
     }
 }

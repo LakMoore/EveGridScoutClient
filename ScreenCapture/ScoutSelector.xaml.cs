@@ -124,6 +124,11 @@ namespace GridScout
             ColumnThree.Width = GridLength.Auto;
         }
 
+        public void SetVolume(double volume)
+        {
+            this.Volume.Content = volume.ToString("0.00");
+        }
+
         private void ShowButton_Click(object sender, RoutedEventArgs e)
         {
             this.SetSelected(true);

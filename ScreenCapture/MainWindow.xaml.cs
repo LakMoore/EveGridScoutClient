@@ -42,6 +42,8 @@ using System.Net.Http;
 using System.Text;
 using System.Runtime.InteropServices;
 using Newtonsoft.Json;
+using NAudio.Wave;
+using NAudio.SoundFont;
 
 namespace GridScout
 {
@@ -84,11 +86,38 @@ namespace GridScout
         private double lastMouseY;
         private string itemName = "";
         private Task processChecker;
-        private WasapiLoopbackCapture audioCapture;
+        private const float NOISE_THRESHOLD = 0.1f; // Adjust this value to change sensitivity
+        private event EventHandler<string> LoudNoiseDetected;
 
         public MainWindow()
         {
             InitializeComponent();
+
+            this.Title = $"GridScout Client v{GetVersion()}";
+
+            LoudNoiseDetected += async (sender, wormhole) =>
+            {
+                var src = (sender as GraphicsCaptureItem);
+                if (src != null)
+                {
+                    var message = new ScoutMessage
+                    {
+                        Message = $"Possible activation detected!",
+                        Scout = src.DisplayName.Substring(6),
+                        Wormhole = wormhole
+                    };
+
+                    var json = JsonConvert.SerializeObject(message);
+
+                    using (var client = new HttpClient())
+                    {
+                        var content = new StringContent(json, Encoding.UTF8, "application/json");
+                        var response = await client.PostAsync(SERVER_URL, content);
+                        var body = await response.Content.ReadAsStringAsync();
+                        Console.WriteLine(body);
+                    }
+                }
+            };
 
             // Initialise Tesseract
             try
@@ -136,6 +165,16 @@ namespace GridScout
             {
                 _scoutInfo = new ScoutCaptureCollection();
             }
+        }
+
+        public string GetVersion()
+        {
+            if (System.Deployment.Application.ApplicationDeployment.IsNetworkDeployed)
+            {
+                return System.Deployment.Application.ApplicationDeployment.CurrentDeployment.CurrentVersion.ToString();
+            }
+
+            return "1.0.0.DEV";
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -432,25 +471,79 @@ namespace GridScout
 
             itemName = item.DisplayName;
 
-            if (!_scoutInfo.ContainsKey(itemName))
-            {
-                var thisSC = new ScoutCapture
-                {
-                    Key = itemName,
-                    Margins = new Thickness()
-                };
-                _scoutInfo.Add(thisSC);
+            // fetch or create the ScoutInfo entry
+            var thisSC = _scoutInfo.GetOrDefault(itemName);
+
+            if (thisSC.Capture != null) {  // stop the old capture
+                thisSC.Capture.FrameCaptured -= OnFrameCapturedAsync;
+                thisSC.Capture.StopCapture();
+                thisSC.Capture.Dispose();
+                thisSC.Capture = null;
             }
 
-            var scoutCapture = _scoutInfo.Get(itemName);
-            scoutCapture.Capture = capture;
+            // stop any old audio captures
+            if (thisSC.AudioCapture != null)
+            {
+                thisSC.AudioCapture?.StopRecording();
+                thisSC.AudioCapture?.Dispose();
+                thisSC.AudioCapture = null;
+            }
 
-            var rect = scoutCapture.Margins;
+            thisSC.Capture = capture;
+
+            // AUDIO - this is not working yet and may never work!!!
+            // thisSC.AudioCapture = new WasapiLoopbackCapture();
+
+            // thisSC.AudioCapture.DataAvailable += (s, e) =>
+            // {
+            //     float volume = CalculateVolume(e.Buffer, e.BytesRecorded);
+
+            //     // get the scoutselector from the scoutselectorpanel on the UI Thread
+            //     Dispatcher.Invoke(() =>
+            //     {
+            //         var selector = ScoutSelectorPanel.Children.OfType<ScoutSelector>().FirstOrDefault(x => x.ScoutName == itemName);
+            //         if (selector != null)
+            //         {
+            //             selector.SetVolume(volume);
+            //         }
+            //     });
+
+            //     if (volume > NOISE_THRESHOLD)
+            //     {
+            //         LoudNoiseDetected?.Invoke(item, wormhole);
+            //         Debug.WriteLine($"Loud noise detected! Level: {volume:F2}");
+            //     }
+            // };
+            // thisSC.AudioCapture.RecordingStopped += (s, e) =>
+            // {
+            //     thisSC.AudioCapture?.Dispose();
+            //     thisSC.AudioCapture = null;
+            // };
+                
+            // thisSC.AudioCapture.StartRecording();
+            // AUDIO - this is not working yet
+
+            _scoutInfo.Add(thisSC);
+
+            var rect = thisSC.Margins;
             TopTextBox.Value = (int)rect.Top;
             LeftTextBox.Value = (int)rect.Left;
             RightTextBox.Value = (int)rect.Right;
             BottomTextBox.Value = (int)rect.Bottom;
 
+            // try to send a keep alive 
+            SendKeepAliveAsync(thisSC, wormhole).Start();
+
+        }
+
+        private void StopScout(string key)
+        {
+            if (_scoutInfo.ContainsKey(key))
+            {
+                var scout = _scoutInfo.Get(key);
+                scout.StopCapture();
+                _scoutInfo.Remove(key);
+            }
         }
 
         private async void OnFrameCapturedAsync(object sender, Bitmap bitmap)
@@ -638,26 +731,7 @@ namespace GridScout
                     } else if (DateTime.Now.Ticks - thisScout.LastReportTime > KEEP_ALIVE_INTERVAL)
                     {
                         // send a keep-alive every 5 mins
-
-                        var message = new ScoutMessage
-                        {
-                            Message = "",
-                            Scout = thisScout.Key.Substring(6),
-                            Wormhole = src.Wormhole
-                        };
-
-                        var json = JsonConvert.SerializeObject(message);
-
-                        using (var client = new HttpClient())
-                        {
-                            var content = new StringContent(json, Encoding.UTF8, "application/json");
-                            var response = await client.PostAsync(SERVER_URL, content);
-                            var body = await response.Content.ReadAsStringAsync();
-                            Console.WriteLine(body);
-                        }
-                        
-                        thisScout.LastReportTime = DateTime.Now.Ticks;
-
+                        await SendKeepAliveAsync(thisScout, src.Wormhole);
                     }
                 }
             }
@@ -674,6 +748,42 @@ namespace GridScout
                 toResume.Capture.ResumeCapture();
                 _isCapturingImage = false;
             }
+        }
+
+        private async Task SendKeepAliveAsync(ScoutCapture thisScout, string wormhole)
+        {
+            var message = new ScoutMessage
+            {
+                Message = $@"{{ ""KEEPALIVE"": ""true"", ""Version"": ""{GetVersion()}"" }}",
+                Scout = thisScout.Key.Substring(6),
+                Wormhole = wormhole
+            };
+
+            var json = JsonConvert.SerializeObject(message);
+
+            using (var client = new HttpClient())
+            {
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var response = await client.PostAsync(SERVER_URL, content);
+                var body = await response.Content.ReadAsStringAsync();
+                Console.WriteLine(body);
+            }
+
+            thisScout.LastReportTime = DateTime.Now.Ticks;
+        }
+
+        private float CalculateVolume(byte[] buffer, int bytesRecorded)
+        {
+            float sum = 0;
+            int samplesCount = bytesRecorded / 4; // 32-bit samples
+            
+            for (int i = 0; i < bytesRecorded; i += 4)
+            {
+                float sample = BitConverter.ToSingle(buffer, i);
+                sum += sample * sample;
+            }
+            
+            return (float)Math.Sqrt(sum / samplesCount);
         }
 
         private void MarginValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
