@@ -1,0 +1,24 @@
+﻿<UserControl x:Class="GridScout2.Scout"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:GridScout2"
+             mc:Ignorable="d" 
+             d:DesignHeight="46.324" d:DesignWidth="548.529">
+    <Grid>
+        <StackPanel Orientation="Horizontal" Margin="10,10,10,10">
+            <Label x:Name="Character" Content="Name" Width="150" />
+            <StackPanel x:Name="DetailsPanel" Orientation="Horizontal" Visibility="Visible">
+                <Label x:Name="Error" Content="" d:LayoutOverrides="LeftPosition, RightPosition" Foreground="Red" Width="0"/>
+                <Label x:Name="SolarSystem" Content="System" d:LayoutOverrides="LeftPosition, RightPosition"/>
+                <Label x:Name="Wormhole" Content="Wormhole" d:LayoutOverrides="LeftPosition, RightPosition"/>
+                <Label x:Name="Grid" Content="No pilots on grid" d:LayoutOverrides="LeftPosition, RightPosition"/>
+            </StackPanel>
+            <StackPanel x:Name="MemoryScanPanel" Orientation="Horizontal" Width="0" >
+                <Label Content="Scanning Eve Client Memory (slow process!):  "/>
+                <ProgressBar Height="10" Width="128" IsIndeterminate="True"/>
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</UserControl>
