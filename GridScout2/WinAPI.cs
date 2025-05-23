@@ -4,6 +4,18 @@ namespace GridScout2
 {
     internal static partial class WinApi
     {
+        internal const int SW_HIDE = 0;
+        internal const int SW_SHOWNORMAL = 1;
+        internal const int SW_SHOWMINIMIZED = 2;
+        internal const int SW_SHOWMAXIMIZED = 3;
+        internal const int SW_SHOWNOACTIVATE = 4;
+        internal const int SW_SHOW = 5;
+        internal const int SW_MINIMIZE = 6;
+        internal const int SW_RESTORE = 9;
+        internal const int SW_SHOWDEFAULT = 10;
+        internal const int SW_FORCEMINIMIZE = 11;
+        internal const int SW_MAXIMIZE = 3;
+
         [StructLayout(LayoutKind.Sequential)]
         internal struct Rect
         {
@@ -59,6 +71,22 @@ namespace GridScout2
         [LibraryImport("user32.dll")]
         internal static partial IntPtr ShowWindow(IntPtr hWnd, int nCmdShow);
 
+        internal static void ShowWindow(IntPtr hWnd)
+        {
+            ShowWindow(hWnd, SW_RESTORE);
+            SetForegroundWindow(hWnd);
+        }
+
+        internal static IntPtr HideWindow(IntPtr hWnd)
+        {
+            return ShowWindow(hWnd, SW_HIDE);
+        }
+
+        internal static IntPtr MinimizeWindow(IntPtr hWnd)
+        {
+            return ShowWindow(hWnd, SW_MINIMIZE);
+        }
+
         [LibraryImport("user32.dll")]
         internal static partial IntPtr GetWindowRect(IntPtr hWnd, ref Rect rect);
 
@@ -75,5 +103,9 @@ namespace GridScout2
 
         [LibraryImport("user32.dll", SetLastError = true)]
         internal static partial uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+        [LibraryImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool SetForegroundWindow(IntPtr hWnd);
     }
 }

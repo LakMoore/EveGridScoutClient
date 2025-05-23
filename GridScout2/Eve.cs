@@ -19,7 +19,7 @@ namespace GridScout2
         {
             public int processId;
 
-            public required string mainWindowId;
+            public required long mainWindowId;
 
             public required string mainWindowTitle;
 
@@ -46,7 +46,7 @@ namespace GridScout2
                     return new GameClientProcessSummaryStruct
                     {
                         processId = process.Id,
-                        mainWindowId = process.MainWindowHandle.ToInt64().ToString(),
+                        mainWindowId = process.MainWindowHandle,
                         mainWindowTitle = process.MainWindowTitle,
                         mainWindowZIndex = zIndexFromWindowHandle(process.MainWindowHandle) ?? 9999,
                     };

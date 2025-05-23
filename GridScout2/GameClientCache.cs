@@ -32,14 +32,16 @@ namespace GridScout2
         }
 
         // get a game client from the cache, or null if not found
-        public static GameClient GetGameClient(int processId)
+        public static GameClient GetGameClient(int processId, long mainWindowId)
         {
-            GameClient? gameClient = _uiRootCache.FirstOrDefault(x => x.processId == processId);
+            GameClient? gameClient = _uiRootCache.FirstOrDefault(x => 
+                x.processId == processId && x.mainWindowId == mainWindowId
+            );
 
             // if not found, make a new one
             if (gameClient == null)
             {
-                gameClient = new GameClient() { processId = processId };
+                gameClient = new GameClient() { processId = processId, mainWindowId = mainWindowId };
                 _uiRootCache.Add(gameClient);
             }
 

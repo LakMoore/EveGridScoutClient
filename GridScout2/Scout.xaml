@@ -5,9 +5,10 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:GridScout2"
              mc:Ignorable="d" 
-             d:DesignHeight="46.324" d:DesignWidth="548.529">
-    <Grid>
+             d:DesignHeight="46.324" d:DesignWidth="548.529" MouseEnter="UserControl_MouseEnter" MouseLeave="UserControl_MouseLeave" MouseLeftButtonDown="UserControl_MouseLeftButtonDown" MouseLeftButtonUp="UserControl_MouseLeftButtonUp">
+    <Grid x:Name="BaseGrid">
         <StackPanel Orientation="Horizontal" Margin="10,10,10,10">
+            <Label x:Name="Alive" Content="-" Width="20" HorizontalAlignment="Center" />
             <Label x:Name="Character" Content="Name" Width="150" />
             <StackPanel x:Name="DetailsPanel" Orientation="Horizontal" Visibility="Visible">
                 <Label x:Name="Error" Content="" d:LayoutOverrides="LeftPosition, RightPosition" Foreground="Red" Width="0"/>

@@ -31,9 +31,12 @@ namespace GridScout2
     public partial class Scout : UserControl
     {
         private const long KEEP_ALIVE_INTERVAL = 5 * TimeSpan.TicksPerMinute; // 5 minutes in ticks
+        private readonly string[] ALIVE_SPINNER = ["-", "\\", "|", "/"];
+        private int aliveSpinnerIndex = 0;
         private GameClient? _gameClient;
         private long lastReportTime;
         private string? lastReportMessage;
+        private Point? _mouseDownPoint;
 
         public Scout()
         {
@@ -49,6 +52,10 @@ namespace GridScout2
             }
             catch (Exception ex)
             {
+                Background = new SolidColorBrush(Colors.Red);
+                Error.Content = ex.Message;
+                Error.Width = Double.NaN;
+                Error.Foreground = new SolidColorBrush(Colors.White);
                 Debug.WriteLine(ex);
             }
         }
@@ -79,7 +86,8 @@ namespace GridScout2
                     var infoLocation = uiRoot.InfoPanelContainer?.InfoPanelLocationInfo;
                     if (infoLocation != null)
                     {
-                        SolarSystem.Content = $"{infoLocation.CurrentSolarSystemName} ({string.Format("{0:0.0}", (double)infoLocation.SecurityStatusPercent / 100)})";
+                        SolarSystem.Content = 
+                            $"{infoLocation.CurrentSolarSystemName} ({string.Format("{0:0.0}", (double)(infoLocation.SecurityStatusPercent ?? 0) / 100)})";
                         SolarSystem.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(infoLocation.SecurityStatusColor ?? "#FF000000"));
                     }
 
@@ -122,6 +130,10 @@ namespace GridScout2
 
                 // wait for a bit
                 await Task.Delay(700 + Random.Shared.Next(100));
+
+                // update alive indicator
+                aliveSpinnerIndex = (aliveSpinnerIndex + 1) % ALIVE_SPINNER.Length;
+                Alive.Content = ALIVE_SPINNER[aliveSpinnerIndex];
             }
         }
 
@@ -198,5 +210,32 @@ namespace GridScout2
             lastReportTime = DateTime.Now.Ticks;
         }
 
+        private void UserControl_MouseEnter(object sender, MouseEventArgs e)
+        {
+            BaseGrid.Background = new SolidColorBrush(Colors.LightBlue);
+        }
+
+        private void UserControl_MouseLeave(object sender, MouseEventArgs e)
+        {
+            BaseGrid.Background = new SolidColorBrush(Colors.Transparent);
+        }
+
+        private void UserControl_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _mouseDownPoint = e.GetPosition(this);
+        }
+
+        private void UserControl_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (
+                _mouseDownPoint != null 
+                && _mouseDownPoint.Equals(e.GetPosition(this))
+                && _gameClient != null
+            )
+            {
+                WinApi.ShowWindow((nint)_gameClient.mainWindowId);
+            }
+            _mouseDownPoint = null;
+        }
     }
 }

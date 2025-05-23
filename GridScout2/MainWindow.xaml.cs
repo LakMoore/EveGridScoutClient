@@ -59,7 +59,7 @@ namespace GridScout2
                     ScoutPanel.Children.Add(scout);
 
                     // fetch the cache incase we have a valid uiRootAddress
-                    GameClient cachedGameClient = GameClientCache.GetGameClient(gc.processId);
+                    GameClient cachedGameClient = GameClientCache.GetGameClient(gc.processId, gc.mainWindowId);
                     return scout.StartAsync(gc, cachedGameClient);
                 })
                 .ToList());
@@ -89,7 +89,7 @@ namespace GridScout2
                         ScoutPanel.Children.Add(scout);
 
                         // fetch the cache incase we have a valid uiRootAddress
-                        GameClient cachedGameClient = GameClientCache.GetGameClient(gc.processId);
+                        GameClient cachedGameClient = GameClientCache.GetGameClient(gc.processId, gc.mainWindowId);
                         return scout.StartAsync(gc, cachedGameClient);
                     }
 

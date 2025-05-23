@@ -4,6 +4,7 @@
     {
         public string? mainWindowTitle;
         public required int processId;
+        public required long mainWindowId;
         public ulong uiRootAddress;
     }
 }
