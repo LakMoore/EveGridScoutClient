@@ -73,7 +73,7 @@ namespace GridScout2
 
         internal static void ShowWindow(IntPtr hWnd)
         {
-            ShowWindow(hWnd, SW_RESTORE);
+            ShowWindow(hWnd, SW_SHOW);
             SetForegroundWindow(hWnd);
         }
 

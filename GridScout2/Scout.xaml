@@ -14,6 +14,7 @@
                 <Label x:Name="Error" Content="" d:LayoutOverrides="LeftPosition, RightPosition" Foreground="Red" Width="0"/>
                 <Label x:Name="SolarSystem" Content="System" d:LayoutOverrides="LeftPosition, RightPosition"/>
                 <Label x:Name="Wormhole" Content="Wormhole" d:LayoutOverrides="LeftPosition, RightPosition"/>
+                <Label x:Name="ShipStatus" Content="" d:LayoutOverrides="LeftPosition, RightPosition" Foreground="Red" Width="0"/>
                 <Label x:Name="Grid" Content="No pilots on grid" d:LayoutOverrides="LeftPosition, RightPosition"/>
             </StackPanel>
             <StackPanel x:Name="MemoryScanPanel" Orientation="Horizontal" Width="0" >

@@ -1,27 +1,15 @@
 ﻿using eve_parse_ui;
-using Microsoft.VisualBasic;
 using Newtonsoft.Json;
 using read_memory_64_bit;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
 using System.Net.Http;
+using System.Net.NetworkInformation;
 using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
-using System.Xml.Serialization;
 using static GridScout2.Eve;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace GridScout2
 {
@@ -37,6 +25,14 @@ namespace GridScout2
         private long lastReportTime;
         private string? lastReportMessage;
         private Point? _mouseDownPoint;
+
+        private const long GRID_CHANGE_NOTIFICATION_DURATION = 1 * TimeSpan.TicksPerMinute; // 1 minutes in ticks
+        private long lastPilotCountChangeTime;
+        private int lastPilotCount = 0;
+
+        // TODO: get this from the SDE
+        private readonly List<int> cloakIDs = [11370, 11577, 11578, 14234, 14776,
+            14778, 14780, 14782, 15790, 16126, 20561, 20563, 20565, 32260];
 
         public Scout()
         {
@@ -69,63 +65,109 @@ namespace GridScout2
                     var uiRoot = await Task.Run(() =>
                     {
                         UITreeNode rootNode = MemoryReader.ReadMemory(GameClient.processId, GameClient.uiRootAddress)!;
+                        if (rootNode == null) return null;
                         return UIParser.ParseUserInterface(rootNode);
                     });
+
+                    if (uiRoot == null)
+                        break;
 
                     // reset things
                     Error.Width = 0;
                     Wormhole.Width = 0;
                     Grid.Width = 0;
+                    ShipStatus.Width = 0;
 
-                    var overviews = uiRoot.OverviewWindows;
-
-                    var gridscoutOverview = overviews
-                        .Where(ow => ow.OverviewTabName.Equals("gridscout", StringComparison.CurrentCultureIgnoreCase))
-                        .FirstOrDefault();
-
+                    // Where are we?
                     var infoLocation = uiRoot.InfoPanelContainer?.InfoPanelLocationInfo;
                     if (infoLocation != null)
                     {
-                        SolarSystem.Content = 
+                        SolarSystem.Content =
                             $"{infoLocation.CurrentSolarSystemName} ({string.Format("{0:0.0}", (double)(infoLocation.SecurityStatusPercent ?? 0) / 100)})";
                         SolarSystem.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(infoLocation.SecurityStatusColor ?? "#FF000000"));
                     }
 
-                    if (gridscoutOverview != null)
+                    // Are we docked?
+                    var isDocked = uiRoot.StationWindow != null;
+
+                    if (isDocked)
                     {
-                        var wormholeCode = gridscoutOverview.Entries
-                            .Where(e => 
-                                e.ObjectType?.StartsWith("Wormhole ", StringComparison.CurrentCultureIgnoreCase) == true
-                            )
-                            .Select(wormhole => wormhole?.ObjectName?.Substring(9))
-                            .SingleOrDefault("No Wormhole")!;
+                        Grid.Content = "Docked";
+                        Grid.Width = Double.NaN;
+                    }
+                    else
+                    {
+                        var shipUI = uiRoot.ShipUI;
 
-                        Wormhole.Content = wormholeCode;
-                        Wormhole.Width = Double.NaN;
+                        var isCloaked = shipUI?.ModuleButtons
+                            .Where(button => cloakIDs.Contains(button.TypeID ?? 0))
+                            .FirstOrDefault()?.IsActive == true;
 
-                        var pilotCount = gridscoutOverview.Entries
-                            .Where(e =>
-                                e.ObjectType?.StartsWith("Wormhole ", StringComparison.CurrentCultureIgnoreCase) != true
-                            )
-                            .Count();
-
-                        if (pilotCount == 0)
+                        if (!isCloaked)
                         {
-                            Grid.Content = "No pilots on grid";
-                            Grid.Width = Double.NaN;
-                        } else
-                        {
-                            Grid.Content = $"{pilotCount} pilot{(pilotCount > 1 ? "s" : "")} on grid";
-                            Grid.Width = Double.NaN;
+                            ShipStatus.Content = "NOT Cloaked!";
+                            ShipStatus.Width = Double.NaN;
                         }
 
-                        await MakeAndSendReport(gridscoutOverview, wormholeCode);
+                        var overviews = uiRoot.OverviewWindows;
 
-                    } else
-                    {
-                        Error.Content = "No GridScout Overview Found";
-                        Error.Width = Double.NaN;
+                        var gridscoutOverview = overviews
+                            .Where(ow => ow.OverviewTabName.Equals("gridscout", StringComparison.CurrentCultureIgnoreCase))
+                            .FirstOrDefault();
+
+                        if (gridscoutOverview != null)
+                        {
+                            var wormholeCode = gridscoutOverview.Entries
+                                .Where(e =>
+                                    e.ObjectType?.StartsWith("Wormhole ", StringComparison.CurrentCultureIgnoreCase) == true
+                                )
+                                .Select(wormhole => wormhole?.ObjectName?.Substring(9))
+                                .SingleOrDefault("No Wormhole")!;
+
+                            Wormhole.Content = wormholeCode;
+                            Wormhole.Width = Double.NaN;
+
+                            var pilotCount = gridscoutOverview.Entries
+                                .Where(e =>
+                                    e.ObjectType?.StartsWith("Wormhole ", StringComparison.CurrentCultureIgnoreCase) != true
+                                )
+                                .Count();
+
+                            if (pilotCount == 0)
+                            {
+                                Grid.Content = "No pilots on grid";
+                                Grid.Width = Double.NaN;
+                            }
+                            else
+                            {
+                                Grid.Content = $"{pilotCount} pilot{(pilotCount > 1 ? "s" : "")} on grid";
+                                Grid.Width = Double.NaN;
+                            }
+
+                            if (pilotCount != lastPilotCount)
+                            {
+                                lastPilotCount = pilotCount;
+                                lastPilotCountChangeTime = DateTime.Now.Ticks;
+                            }
+
+                            long deltaTime = DateTime.Now.Ticks - lastPilotCountChangeTime;
+                            if (deltaTime < GRID_CHANGE_NOTIFICATION_DURATION)
+                            {
+                                // Lerp the colour from orange to transparent over time
+                                byte alpha = (byte)(255f - (255f * (double)deltaTime / GRID_CHANGE_NOTIFICATION_DURATION));
+                                Background = new SolidColorBrush(Color.FromArgb(alpha, 255, 128, 0));
+                            }
+
+                            await MakeAndSendReport(gridscoutOverview, wormholeCode);
+
+                        }
+                        else
+                        {
+                            Error.Content = "No GridScout Overview Found";
+                            Error.Width = Double.NaN;
+                        }
                     }
+
                 }
 
                 // wait for a bit
