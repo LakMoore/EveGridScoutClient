@@ -6,10 +6,12 @@ using System.Threading.Tasks;
 
 namespace GridScout2
 {
-    public class ScoutMessage
+    public record ScoutMessage
     {
-        public required string Message { get; set; }
-        public required string Scout { get; set; }
-        public required string Wormhole { get; set; }
+        public required string Message { get; init; }
+        public required string Scout { get; init; }
+        public required string System { get; init; }
+        public required string Wormhole { get; init; }
+        public required List<ScoutEntry> Entries { get; init; }
     }
 }

@@ -22,7 +22,7 @@ namespace GridScout2
         private int aliveSpinnerIndex = 0;
         private GameClient? _gameClient;
         private long lastReportTime;
-        private string? lastReportMessage;
+        private ScoutMessage? lastReportMessage;
         private Point? _mouseDownPoint;
 
         private const long GRID_CHANGE_NOTIFICATION_DURATION = 1 * TimeSpan.TicksPerMinute; // 1 minutes in ticks
@@ -220,9 +220,10 @@ namespace GridScout2
                                     lastPilotCount = pilotCount;
                                     lastPilotCountChangeTime = DateTime.Now.Ticks;
                                 }
-
-                                await MakeAndSendReport(gridscoutOverview, wormholeCode);
                             }
+
+                            // send the report whether we're on a WH or not
+                            await MakeAndSendReport(gridscoutOverview, wormholeCode);
                         }
                         else
                         {
@@ -298,33 +299,46 @@ namespace GridScout2
                 .Select(e => e.ObjectType + " " + e.ObjectCorporation + " " + e.ObjectAlliance + " " + e.ObjectName)
                 .DefaultIfEmpty(string.Empty)
                 .Aggregate((a, b) => a + "\n" + b);
-            
+
+            var entries = gridscoutOverview.Entries
+                .Select(e => new ScoutEntry()
+                {
+                    Type = e.ObjectType,
+                    Corporation = e.ObjectCorporation,
+                    Alliance = e.ObjectAlliance,
+                    Name = e.ObjectName,
+                    Distance = (e.ObjectDistanceInMeters ?? 0).ToString(),
+                    Velocity = (e.ObjectVelocity ?? 0).ToString()
+                })
+                .ToList();
+
             var message = new ScoutMessage
             {
                 Message = text,
                 Scout = Character.Content.ToString() ?? "No Name",
-                Wormhole = wormhole
+                System = _sigListSystemName ?? "Unknown System",
+                Wormhole = wormhole,
+                Entries = entries
             };
 
+            // if the message has changed or it's been a while, send it
             if (
-                lastReportMessage == message.Message 
-                && lastReportTime > DateTime.Now.Ticks - KEEP_ALIVE_INTERVAL
+                !message.Equals(lastReportMessage)
+                || lastReportTime < DateTime.Now.Ticks - KEEP_ALIVE_INTERVAL
             ) {
-                return;
+                var json = JsonConvert.SerializeObject(message);
+
+                using (var client = new HttpClient())
+                {
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
+                    var response = await client.PostAsync(MainWindow.ServerURL, content);
+                    var body = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine(body);
+                }
+
+                lastReportMessage = message;
+                lastReportTime = DateTime.Now.Ticks;
             }
-
-            var json = JsonConvert.SerializeObject(message);
-
-            using (var client = new HttpClient())
-            {
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-                var response = await client.PostAsync(MainWindow.ServerURL, content);
-                var body = await response.Content.ReadAsStringAsync();
-                Console.WriteLine(body);
-            }
-
-            lastReportMessage = message.Message;
-            lastReportTime = DateTime.Now.Ticks;
         }
 
         private void UserControl_MouseEnter(object sender, MouseEventArgs e)
