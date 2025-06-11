@@ -376,7 +376,7 @@ namespace GridScout2
             _mouseDownPoint = e.GetPosition(this);
         }
 
-        private void UserControl_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        private async void UserControl_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             if (
                 _mouseDownPoint != null 
@@ -385,6 +385,14 @@ namespace GridScout2
             )
             {
                 WinApi.ShowWindow((nint)_gameClient.mainWindowId);
+
+                // open a new Visualise window
+                if (_uiRoot != null && Debugger.IsAttached)
+                {
+                    var visualise = new VisualiseUI();
+                    visualise.Show();
+                    await visualise.VisualiseAsync(_uiRoot);
+                }
             }
             _mouseDownPoint = null;
         }
