@@ -3,7 +3,6 @@ using Newtonsoft.Json;
 using read_memory_64_bit;
 using System.Diagnostics;
 using System.Net.Http;
-using System.Net.NetworkInformation;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -29,6 +28,10 @@ namespace GridScout2
         private const long GRID_CHANGE_NOTIFICATION_DURATION = 1 * TimeSpan.TicksPerMinute; // 1 minutes in ticks
         private long lastPilotCountChangeTime;
         private int lastPilotCount = 0;
+
+        private string? _sigListSystemName;
+        private readonly List<string> _sigCodes = [];
+        private ParsedUserInterface? _uiRoot;
 
         // TODO: get this from the SDE
         private readonly List<int> cloakIDs = [11370, 11577, 11578, 14234, 14776,
@@ -62,14 +65,14 @@ namespace GridScout2
             {
                 if (GameClient?.uiRootAddress != null)
                 {
-                    var uiRoot = await Task.Run(() =>
+                    _uiRoot = await Task.Run(() =>
                     {
                         UITreeNode rootNode = MemoryReader.ReadMemory(GameClient.processId, GameClient.uiRootAddress)!;
                         if (rootNode == null) return null;
                         return UIParser.ParseUserInterface(rootNode);
                     });
 
-                    if (uiRoot == null)
+                    if (_uiRoot == null)
                         break;
 
                     // reset things
@@ -79,16 +82,21 @@ namespace GridScout2
                     ShipStatus.Width = 0;
 
                     // Where are we?
-                    var infoLocation = uiRoot.InfoPanelContainer?.InfoPanelLocationInfo;
-                    if (infoLocation != null)
-                    {
-                        SolarSystem.Content =
-                            $"{infoLocation.CurrentSolarSystemName} ({string.Format("{0:0.0}", (double)(infoLocation.SecurityStatusPercent ?? 0) / 100)})";
-                        SolarSystem.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(infoLocation.SecurityStatusColor ?? "#FF000000"));
-                    }
+                    var infoLocation = _uiRoot.InfoPanelContainer?.InfoPanelLocationInfo;
+                    var probeScanner = _uiRoot.ProbeScanner;
 
                     // Are we docked?
-                    var isDocked = uiRoot.StationWindow != null;
+                    var isDocked = _uiRoot.StationWindow != null;
+
+                    string? currentSystemName = null;
+
+                    if (infoLocation != null && infoLocation.CurrentSolarSystemName != null)
+                    {
+                        currentSystemName = infoLocation.CurrentSolarSystemName;
+                        SolarSystem.Content =
+                            $"{currentSystemName} ({string.Format("{0:0.0}", (double)(infoLocation.SecurityStatusPercent ?? 0) / 100)})";
+                        SolarSystem.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(infoLocation.SecurityStatusColor ?? "#FF000000"));
+                    }
 
                     if (isDocked)
                     {
@@ -97,19 +105,66 @@ namespace GridScout2
                     }
                     else
                     {
-                        var shipUI = uiRoot.ShipUI;
-
-                        var isCloaked = shipUI?.ModuleButtons
-                            .Where(button => cloakIDs.Contains(button.TypeID ?? 0))
-                            .FirstOrDefault()?.IsActive == true;
-
-                        if (!isCloaked)
+                        if (
+                            probeScanner != null
+                            && !string.IsNullOrEmpty(currentSystemName)
+                        )
                         {
-                            ShipStatus.Content = "NOT Cloaked!";
-                            ShipStatus.Width = Double.NaN;
+                            var currentSigCodes = probeScanner.ScanResults
+                                .Select(result => result.CellsTexts?.GetValueOrDefault("ID"))
+                                .Where(sig => sig != null)
+                                .ToList();
+
+                            // Did we change solar system?
+                            if (!currentSystemName.Equals(_sigListSystemName))
+                            {
+                                // reset the sig list
+                                _sigCodes.Clear();
+                                currentSigCodes
+                                    .ToList()
+                                    .ForEach(sig => _sigCodes.Add(sig!));
+
+                                // note the system these sigs belong to
+                                _sigListSystemName = currentSystemName;
+                            }
+                            else
+                            {
+                                // we didn't change solar system
+                                // so check whether the sig list changed
+
+                                // find the changes in sig list
+                                var added = currentSigCodes.Except(_sigCodes).ToList();
+                                var removed = _sigCodes.Except(currentSigCodes).ToList();
+
+                                // if the sig list has changed
+                                if (added.Count > 0 || removed.Count > 0)
+                                {
+                                    // reset the sig list
+                                    _sigCodes.Clear();
+                                    _sigCodes.AddRange(currentSigCodes!);
+                                }
+
+                                if (added.Count > 0)
+                                {
+                                    // New Sig!!!
+                                    lastPilotCountChangeTime = DateTime.Now.Ticks;
+                                    ScanChanges.Content += "New Sig: " + string.Join(", ", added);
+                                    ScanChanges.Width = Double.NaN;
+                                }
+
+                                if (removed.Count > 0)
+                                {
+                                    // Removed Sig!!!
+                                    lastPilotCountChangeTime = DateTime.Now.Ticks;
+                                    ScanChanges.Content += "Sig Removed: " + string.Join(", ", removed);
+                                    ScanChanges.Width = Double.NaN;
+                                }
+                            }
                         }
 
-                        var overviews = uiRoot.OverviewWindows;
+                        var shipUI = _uiRoot.ShipUI;
+
+                        var overviews = _uiRoot.OverviewWindows;
 
                         var gridscoutOverview = overviews
                             .Where(ow => ow.OverviewTabName.Equals("gridscout", StringComparison.CurrentCultureIgnoreCase))
@@ -122,44 +177,52 @@ namespace GridScout2
                                     e.ObjectType?.StartsWith("Wormhole ", StringComparison.CurrentCultureIgnoreCase) == true
                                 )
                                 .Select(wormhole => wormhole?.ObjectName?.Substring(9))
-                                .SingleOrDefault("No Wormhole")!;
+                                .SingleOrDefault("")!;
 
-                            Wormhole.Content = wormholeCode;
-                            Wormhole.Width = Double.NaN;
-
-                            var pilotCount = gridscoutOverview.Entries
-                                .Where(e =>
-                                    e.ObjectType?.StartsWith("Wormhole ", StringComparison.CurrentCultureIgnoreCase) != true
-                                )
-                                .Count();
-
-                            if (pilotCount == 0)
+                            if (string.IsNullOrEmpty(wormholeCode))
                             {
-                                Grid.Content = "No pilots on grid";
-                                Grid.Width = Double.NaN;
-                            }
-                            else
+                                Wormhole.Content = "No Wormhole";
+                                Wormhole.Width = Double.NaN;
+                            } else
                             {
-                                Grid.Content = $"{pilotCount} pilot{(pilotCount > 1 ? "s" : "")} on grid";
-                                Grid.Width = Double.NaN;
+                                Wormhole.Content = wormholeCode;
+                                Wormhole.Width = Double.NaN;
+
+                                var isCloaked = shipUI?.ModuleButtons
+                                    .Where(button => cloakIDs.Contains(button.TypeID ?? 0))
+                                    .FirstOrDefault()?.IsActive == true;
+
+                                if (!isCloaked)
+                                {
+                                    ShipStatus.Content = "NOT Cloaked!";
+                                    ShipStatus.Width = Double.NaN;
+                                }
+
+                                var pilotCount = gridscoutOverview.Entries
+                                    .Where(e =>
+                                        e.ObjectType?.StartsWith("Wormhole ", StringComparison.CurrentCultureIgnoreCase) != true
+                                    )
+                                    .Count();
+
+                                if (pilotCount == 0)
+                                {
+                                    Grid.Content = "No pilots on grid";
+                                    Grid.Width = Double.NaN;
+                                }
+                                else
+                                {
+                                    Grid.Content = $"{pilotCount} pilot{(pilotCount > 1 ? "s" : "")} on grid";
+                                    Grid.Width = Double.NaN;
+                                }
+
+                                if (pilotCount != lastPilotCount)
+                                {
+                                    lastPilotCount = pilotCount;
+                                    lastPilotCountChangeTime = DateTime.Now.Ticks;
+                                }
+
+                                await MakeAndSendReport(gridscoutOverview, wormholeCode);
                             }
-
-                            if (pilotCount != lastPilotCount)
-                            {
-                                lastPilotCount = pilotCount;
-                                lastPilotCountChangeTime = DateTime.Now.Ticks;
-                            }
-
-                            long deltaTime = DateTime.Now.Ticks - lastPilotCountChangeTime;
-                            if (deltaTime < GRID_CHANGE_NOTIFICATION_DURATION)
-                            {
-                                // Lerp the colour from orange to transparent over time
-                                byte alpha = (byte)(255f - (255f * (double)deltaTime / GRID_CHANGE_NOTIFICATION_DURATION));
-                                Background = new SolidColorBrush(Color.FromArgb(alpha, 255, 128, 0));
-                            }
-
-                            await MakeAndSendReport(gridscoutOverview, wormholeCode);
-
                         }
                         else
                         {
@@ -168,6 +231,18 @@ namespace GridScout2
                         }
                     }
 
+                    long deltaTime = DateTime.Now.Ticks - lastPilotCountChangeTime;
+                    if (deltaTime < GRID_CHANGE_NOTIFICATION_DURATION)
+                    {
+                        // Lerp the colour from orange to transparent over time
+                        byte alpha = (byte)(255f - (255f * (double)deltaTime / GRID_CHANGE_NOTIFICATION_DURATION));
+                        Background = new SolidColorBrush(Color.FromArgb(alpha, 255, 128, 0));
+                    }
+                    else
+                    {
+                        ScanChanges.Content = "";
+                        ScanChanges.Width = 0;
+                    }
                 }
 
                 // wait for a bit
@@ -189,7 +264,7 @@ namespace GridScout2
         internal async Task StartAsync(GameClientProcessSummaryStruct gc, GameClient cachedGameClient)
         {
             cachedGameClient.mainWindowTitle = gc.mainWindowTitle;
-            Character.Content = gc.mainWindowTitle.Substring(6);
+            Character.Content = gc.mainWindowTitle.Length > 6 ? gc.mainWindowTitle.Substring(6) : gc.mainWindowTitle;
 
             if (cachedGameClient.uiRootAddress == 0)
             { 

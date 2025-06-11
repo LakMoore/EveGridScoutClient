@@ -16,6 +16,7 @@
                 <Label x:Name="Wormhole" Content="Wormhole" d:LayoutOverrides="LeftPosition, RightPosition"/>
                 <Label x:Name="ShipStatus" Content="" d:LayoutOverrides="LeftPosition, RightPosition" Foreground="Red" Width="0"/>
                 <Label x:Name="Grid" Content="No pilots on grid" d:LayoutOverrides="LeftPosition, RightPosition"/>
+                <Label x:Name="ScanChanges" Content="" d:LayoutOverrides="LeftPosition, RightPosition" Width="0"/>
             </StackPanel>
             <StackPanel x:Name="MemoryScanPanel" Orientation="Horizontal" Width="0" >
                 <Label Content="Scanning Eve Client Memory (slow process!):  "/>
