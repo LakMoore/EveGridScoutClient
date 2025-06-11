@@ -19,6 +19,7 @@ namespace GridScout2
     {
         private const long KEEP_ALIVE_INTERVAL = 5 * TimeSpan.TicksPerMinute; // 5 minutes in ticks
         private readonly string[] ALIVE_SPINNER = ["-", "\\", "|", "/"];
+        private readonly string DISCONNECT_STRING = "Connection lost";
         private int aliveSpinnerIndex = 0;
         private GameClient? _gameClient;
         private long lastReportTime;
@@ -87,6 +88,7 @@ namespace GridScout2
 
                     // Are we docked?
                     var isDocked = _uiRoot.StationWindow != null;
+                    var isDisconnected = _uiRoot.MessageBoxes.Select(m => m.TextHeadline).Any(m => m?.Equals(DISCONNECT_STRING, StringComparison.CurrentCultureIgnoreCase) == true);
 
                     string? currentSystemName = null;
 
@@ -223,7 +225,7 @@ namespace GridScout2
                             }
 
                             // send the report whether we're on a WH or not
-                            await MakeAndSendReport(gridscoutOverview, wormholeCode);
+                            await MakeAndSendReport(gridscoutOverview, wormholeCode, isDisconnected);
                         }
                         else
                         {
@@ -292,34 +294,52 @@ namespace GridScout2
             }
         }
 
-        private async Task MakeAndSendReport(OverviewWindow gridscoutOverview, string wormhole)
+        private async Task MakeAndSendReport(OverviewWindow gridscoutOverview, string wormhole, bool isDisconnected)
         {
-            var text = gridscoutOverview.Entries
-                //.Where(e => e.ObjectType?.StartsWith("Wormhole ", StringComparison.CurrentCultureIgnoreCase) != true)
-                .Select(e => e.ObjectType + " " + e.ObjectCorporation + " " + e.ObjectAlliance + " " + e.ObjectName)
-                .DefaultIfEmpty(string.Empty)
-                .Aggregate((a, b) => a + "\n" + b);
+            ScoutMessage message;
 
-            var entries = gridscoutOverview.Entries
-                .Select(e => new ScoutEntry()
-                {
-                    Type = e.ObjectType,
-                    Corporation = e.ObjectCorporation,
-                    Alliance = e.ObjectAlliance,
-                    Name = e.ObjectName,
-                    Distance = (e.ObjectDistanceInMeters ?? 0).ToString(),
-                    Velocity = (e.ObjectVelocity ?? 0).ToString()
-                })
-                .ToList();
-
-            var message = new ScoutMessage
+            if (isDisconnected)
             {
-                Message = text,
-                Scout = Character.Content.ToString() ?? "No Name",
-                System = _sigListSystemName ?? "Unknown System",
-                Wormhole = wormhole,
-                Entries = entries
-            };
+                message = new ScoutMessage
+                {
+                    Message = "",
+                    Scout = Character.Content.ToString() ?? "No Name",
+                    System = _sigListSystemName ?? "Unknown System",
+                    Wormhole = wormhole,
+                    Entries = [],
+                    Disconnected = true
+                };
+            }
+            else
+            {
+                var text = gridscoutOverview.Entries
+                    //.Where(e => e.ObjectType?.StartsWith("Wormhole ", StringComparison.CurrentCultureIgnoreCase) != true)
+                    .Select(e => e.ObjectType + " " + e.ObjectCorporation + " " + e.ObjectAlliance + " " + e.ObjectName)
+                    .DefaultIfEmpty(string.Empty)
+                    .Aggregate((a, b) => a + "\n" + b);
+
+                var entries = gridscoutOverview.Entries
+                    .Select(e => new ScoutEntry()
+                    {
+                        Type = e.ObjectType,
+                        Corporation = e.ObjectCorporation,
+                        Alliance = e.ObjectAlliance,
+                        Name = e.ObjectName,
+                        Distance = (e.ObjectDistanceInMeters ?? 0).ToString(),
+                        Velocity = (e.ObjectVelocity ?? 0).ToString()
+                    })
+                    .ToList();
+
+                message = new ScoutMessage
+                {
+                    Message = text,
+                    Scout = Character.Content.ToString() ?? "No Name",
+                    System = _sigListSystemName ?? "Unknown System",
+                    Wormhole = wormhole,
+                    Entries = entries,
+                    Disconnected = false
+                };
+            }
 
             // if the message has changed or it's been a while, send it
             if (

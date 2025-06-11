@@ -13,5 +13,6 @@ namespace GridScout2
         public required string System { get; init; }
         public required string Wormhole { get; init; }
         public required List<ScoutEntry> Entries { get; init; }
+        public bool Disconnected { get; init; }
     }
 }
