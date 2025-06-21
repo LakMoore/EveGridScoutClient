@@ -1,9 +1,6 @@
 ﻿using eve_parse_ui;
-using Newtonsoft.Json;
 using read_memory_64_bit;
 using System.Diagnostics;
-using System.Net.Http;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -37,26 +34,59 @@ namespace GridScout2
         // TODO: get this from the SDE
         private readonly List<int> cloakIDs = [11370, 11577, 11578, 14234, 14776,
             14778, 14780, 14782, 15790, 16126, 20561, 20563, 20565, 32260];
+        private readonly string _version;
 
         public Scout()
         {
             InitializeComponent();
             Loaded += Scout_Loaded;
+
+            // get the oneclick version
+            string? versionString = Environment.GetEnvironmentVariable("CLICKONCE_DEPLOYMENT_VERSION");
+            if (!string.IsNullOrEmpty(versionString))
+            {
+                //Version version = new Version(versionString);
+                //int applicationRevision = version.Revision;
+                // Use applicationRevision as needed
+                _version = versionString;
+            } else
+            {   
+                _version = "unknown";
+            }
         }
 
         private async void Scout_Loaded(object sender, RoutedEventArgs e)
         {
-            try
+            while (true)
             {
-                await WatchScout();
-            }
-            catch (Exception ex)
-            {
-                Background = new SolidColorBrush(Colors.Red);
-                Error.Content = ex.Message;
-                Error.Width = Double.NaN;
-                Error.Foreground = new SolidColorBrush(Colors.White);
-                Debug.WriteLine(ex);
+                try
+                {
+                    Background = new SolidColorBrush(Colors.Transparent);
+                    Error.Content = "";
+                    Error.Width = 0;
+                    Error.Foreground = new SolidColorBrush(Colors.Red);
+                    await WatchScout();
+                }
+                catch (Exception ex)
+                {
+                    Background = new SolidColorBrush(Colors.Red);
+                    Error.Content = ex.Message;
+                    Error.Width = Double.NaN;
+                    Error.Foreground = new SolidColorBrush(Colors.White);
+                    Debug.WriteLine(ex);
+
+                    try
+                    {
+                        await Server.SendError(ex);
+                    }
+                    catch (Exception ex2)
+                    {
+                        Debug.WriteLine(ex2);
+                    }
+                }
+
+                // wait 5 seconds
+                await Task.Delay(5000);
             }
         }
 
@@ -75,7 +105,7 @@ namespace GridScout2
 
                     if (_uiRoot == null)
                         break;
-
+                    
                     // reset things
                     Error.Width = 0;
                     Wormhole.Width = 0;
@@ -85,10 +115,6 @@ namespace GridScout2
                     // Where are we?
                     var infoLocation = _uiRoot.InfoPanelContainer?.InfoPanelLocationInfo;
                     var probeScanner = _uiRoot.ProbeScanner;
-
-                    // Are we docked?
-                    var isDocked = _uiRoot.StationWindow != null;
-                    var isDisconnected = _uiRoot.MessageBoxes.Select(m => m.TextHeadline).Any(m => m?.Equals(DISCONNECT_STRING, StringComparison.CurrentCultureIgnoreCase) == true);
 
                     string? currentSystemName = null;
 
@@ -100,80 +126,103 @@ namespace GridScout2
                         SolarSystem.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(infoLocation.SecurityStatusColor ?? "#FF000000"));
                     }
 
+                    // Are we docked?
+                    var isDocked = _uiRoot.StationWindow != null;
+
                     if (isDocked)
                     {
                         Grid.Content = "Docked";
                         Grid.Width = Double.NaN;
                     }
+
+                    var overviews = _uiRoot.OverviewWindows;
+
+                    var gridscoutOverview = overviews
+                        .Where(ow => ow.OverviewTabName.Equals("gridscout", StringComparison.CurrentCultureIgnoreCase))
+                        .FirstOrDefault();
+
+                    var isDisconnected = _uiRoot.MessageBoxes.Select(m => m.TextHeadline).Any(m => m?.Equals(DISCONNECT_STRING, StringComparison.CurrentCultureIgnoreCase) == true);
+
+                    if (isDisconnected)
+                    {
+                        Background = new SolidColorBrush(Colors.Red);
+                        Error.Content = "Connection Lost";
+                        Error.Width = Double.NaN;
+                        Error.Foreground = new SolidColorBrush(Colors.White);
+                    }
+
+                    if (gridscoutOverview == null)
+                    {
+                        Error.Content = "No GridScout Overview Found";
+                        Error.Width = Double.NaN;
+                    }
                     else
                     {
-                        if (
-                            probeScanner != null
-                            && !string.IsNullOrEmpty(currentSystemName)
-                        )
+                        if (isDisconnected)
                         {
-                            var currentSigCodes = probeScanner.ScanResults
-                                .Select(result => result.CellsTexts?.GetValueOrDefault("ID"))
-                                .Where(sig => sig != null)
-                                .ToList();
-
-                            // Did we change solar system?
-                            if (!currentSystemName.Equals(_sigListSystemName))
+                            await SendDisconnectedReport(currentSystemName);
+                        }
+                        else
+                        {
+                            if (
+                                probeScanner != null
+                                && !string.IsNullOrEmpty(currentSystemName)
+                            )
                             {
-                                // reset the sig list
-                                _sigCodes.Clear();
-                                currentSigCodes
-                                    .ToList()
-                                    .ForEach(sig => _sigCodes.Add(sig!));
+                                var currentSigCodes = probeScanner.ScanResults
+                                    .Select(result => result.CellsTexts?.GetValueOrDefault("ID"))
+                                    .Where(sig => sig != null)
+                                    .ToList();
 
-                                // note the system these sigs belong to
-                                _sigListSystemName = currentSystemName;
-                            }
-                            else
-                            {
-                                // we didn't change solar system
-                                // so check whether the sig list changed
-
-                                // find the changes in sig list
-                                var added = currentSigCodes.Except(_sigCodes).ToList();
-                                var removed = _sigCodes.Except(currentSigCodes).ToList();
-
-                                // if the sig list has changed
-                                if (added.Count > 0 || removed.Count > 0)
+                                // Did we change solar system?
+                                if (!currentSystemName.Equals(_sigListSystemName))
                                 {
                                     // reset the sig list
                                     _sigCodes.Clear();
-                                    _sigCodes.AddRange(currentSigCodes!);
-                                }
+                                    currentSigCodes
+                                        .ToList()
+                                        .ForEach(sig => _sigCodes.Add(sig!));
 
-                                if (added.Count > 0)
-                                {
-                                    // New Sig!!!
-                                    lastPilotCountChangeTime = DateTime.Now.Ticks;
-                                    ScanChanges.Content += "New Sig: " + string.Join(", ", added);
-                                    ScanChanges.Width = Double.NaN;
+                                    // note the system these sigs belong to
+                                    _sigListSystemName = currentSystemName;
                                 }
-
-                                if (removed.Count > 0)
+                                else
                                 {
-                                    // Removed Sig!!!
-                                    lastPilotCountChangeTime = DateTime.Now.Ticks;
-                                    ScanChanges.Content += "Sig Removed: " + string.Join(", ", removed);
-                                    ScanChanges.Width = Double.NaN;
+                                    // we didn't change solar system
+                                    // so check whether the sig list changed
+
+                                    // find the changes in sig list
+                                    var added = currentSigCodes.Except(_sigCodes).ToList();
+                                    var removed = _sigCodes.Except(currentSigCodes).ToList();
+
+                                    // if the sig list has changed
+                                    if (added.Count > 0 || removed.Count > 0)
+                                    {
+                                        // reset the sig list
+                                        _sigCodes.Clear();
+                                        _sigCodes.AddRange(currentSigCodes!);
+                                    }
+
+                                    if (added.Count > 0)
+                                    {
+                                        // New Sig!!!
+                                        lastPilotCountChangeTime = DateTime.Now.Ticks;
+                                        ScanChanges.Content += "New Sig: " + string.Join(", ", added);
+                                        ScanChanges.Width = Double.NaN;
+                                    }
+
+                                    if (removed.Count > 0)
+                                    {
+                                        // Removed Sig!!!
+                                        lastPilotCountChangeTime = DateTime.Now.Ticks;
+                                        ScanChanges.Content += "Sig Removed: " + string.Join(", ", removed);
+                                        ScanChanges.Width = Double.NaN;
+                                    }
                                 }
                             }
-                        }
 
-                        var shipUI = _uiRoot.ShipUI;
+                            var shipUI = _uiRoot.ShipUI;
 
-                        var overviews = _uiRoot.OverviewWindows;
-
-                        var gridscoutOverview = overviews
-                            .Where(ow => ow.OverviewTabName.Equals("gridscout", StringComparison.CurrentCultureIgnoreCase))
-                            .FirstOrDefault();
-
-                        if (gridscoutOverview != null)
-                        {
                             var wormholeCode = gridscoutOverview.Entries
                                 .Where(e =>
                                     e.ObjectType?.StartsWith("Wormhole ", StringComparison.CurrentCultureIgnoreCase) == true
@@ -185,7 +234,8 @@ namespace GridScout2
                             {
                                 Wormhole.Content = "No Wormhole";
                                 Wormhole.Width = Double.NaN;
-                            } else
+                            }
+                            else
                             {
                                 Wormhole.Content = wormholeCode;
                                 Wormhole.Width = Double.NaN;
@@ -224,13 +274,8 @@ namespace GridScout2
                                 }
                             }
 
-                            // send the report whether we're on a WH or not
-                            await MakeAndSendReport(gridscoutOverview, wormholeCode, isDisconnected);
-                        }
-                        else
-                        {
-                            Error.Content = "No GridScout Overview Found";
-                            Error.Width = Double.NaN;
+                            // send the report
+                            await SendReport(gridscoutOverview, wormholeCode);
                         }
                     }
 
@@ -294,67 +339,65 @@ namespace GridScout2
             }
         }
 
-        private async Task MakeAndSendReport(OverviewWindow gridscoutOverview, string wormhole, bool isDisconnected)
+        private async Task SendDisconnectedReport(string systemName)
         {
-            ScoutMessage message;
-
-            if (isDisconnected)
+            ScoutMessage message = new()
             {
-                message = new ScoutMessage
+                Message = "",
+                Scout = Character.Content.ToString() ?? "No Name",
+                System = _sigListSystemName ?? systemName ?? "Unknown System",
+                Wormhole = "Lost Connection",
+                Entries = [],
+                Disconnected = true,
+                Version = _version
+            };
+
+            await SendIfChangedOrOld(message);
+        }
+
+        private async Task SendReport(OverviewWindow gridscoutOverview, string wormhole)
+        {
+            var text = gridscoutOverview.Entries
+                //.Where(e => e.ObjectType?.StartsWith("Wormhole ", StringComparison.CurrentCultureIgnoreCase) != true)
+                .Select(e => e.ObjectType + " " + e.ObjectCorporation + " " + e.ObjectAlliance + " " + e.ObjectName)
+                .DefaultIfEmpty(string.Empty)
+                .Aggregate((a, b) => a + "\n" + b);
+
+            var entries = gridscoutOverview.Entries
+                .Select(e => new ScoutEntry()
                 {
-                    Message = "",
-                    Scout = Character.Content.ToString() ?? "No Name",
-                    System = _sigListSystemName ?? "Unknown System",
-                    Wormhole = wormhole,
-                    Entries = [],
-                    Disconnected = true
-                };
-            }
-            else
+                    Type = e.ObjectType,
+                    Corporation = e.ObjectCorporation,
+                    Alliance = e.ObjectAlliance,
+                    Name = e.ObjectName,
+                    Distance = (e.ObjectDistanceInMeters ?? 0).ToString(),
+                    Velocity = (e.ObjectVelocity ?? 0).ToString()
+                })
+                .ToList();
+
+            ScoutMessage message = new()
             {
-                var text = gridscoutOverview.Entries
-                    //.Where(e => e.ObjectType?.StartsWith("Wormhole ", StringComparison.CurrentCultureIgnoreCase) != true)
-                    .Select(e => e.ObjectType + " " + e.ObjectCorporation + " " + e.ObjectAlliance + " " + e.ObjectName)
-                    .DefaultIfEmpty(string.Empty)
-                    .Aggregate((a, b) => a + "\n" + b);
+                Message = text,
+                Scout = Character.Content.ToString() ?? "No Name",
+                System = _sigListSystemName ?? "Unknown System",
+                Wormhole = wormhole,
+                Entries = entries,
+                Disconnected = false,
+                Version = _version
+            };
 
-                var entries = gridscoutOverview.Entries
-                    .Select(e => new ScoutEntry()
-                    {
-                        Type = e.ObjectType,
-                        Corporation = e.ObjectCorporation,
-                        Alliance = e.ObjectAlliance,
-                        Name = e.ObjectName,
-                        Distance = (e.ObjectDistanceInMeters ?? 0).ToString(),
-                        Velocity = (e.ObjectVelocity ?? 0).ToString()
-                    })
-                    .ToList();
+            await SendIfChangedOrOld(message);
+        }
 
-                message = new ScoutMessage
-                {
-                    Message = text,
-                    Scout = Character.Content.ToString() ?? "No Name",
-                    System = _sigListSystemName ?? "Unknown System",
-                    Wormhole = wormhole,
-                    Entries = entries,
-                    Disconnected = false
-                };
-            }
-
+        private async Task SendIfChangedOrOld(ScoutMessage message)
+        {
             // if the message has changed or it's been a while, send it
             if (
-                !message.Equals(lastReportMessage)
+                !message.MyEquals(lastReportMessage)
                 || lastReportTime < DateTime.Now.Ticks - KEEP_ALIVE_INTERVAL
-            ) {
-                var json = JsonConvert.SerializeObject(message);
-
-                using (var client = new HttpClient())
-                {
-                    var content = new StringContent(json, Encoding.UTF8, "application/json");
-                    var response = await client.PostAsync(MainWindow.ServerURL, content);
-                    var body = await response.Content.ReadAsStringAsync();
-                    Console.WriteLine(body);
-                }
+            )
+            {
+                await Server.SendReport(message);
 
                 lastReportMessage = message;
                 lastReportTime = DateTime.Now.Ticks;
