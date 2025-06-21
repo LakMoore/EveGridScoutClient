@@ -34,25 +34,11 @@ namespace GridScout2
         // TODO: get this from the SDE
         private readonly List<int> cloakIDs = [11370, 11577, 11578, 14234, 14776,
             14778, 14780, 14782, 15790, 16126, 20561, 20563, 20565, 32260];
-        private readonly string _version;
 
         public Scout()
         {
             InitializeComponent();
             Loaded += Scout_Loaded;
-
-            // get the oneclick version
-            string? versionString = Environment.GetEnvironmentVariable("CLICKONCE_DEPLOYMENT_VERSION");
-            if (!string.IsNullOrEmpty(versionString))
-            {
-                //Version version = new Version(versionString);
-                //int applicationRevision = version.Revision;
-                // Use applicationRevision as needed
-                _version = versionString;
-            } else
-            {   
-                _version = "unknown";
-            }
         }
 
         private async void Scout_Loaded(object sender, RoutedEventArgs e)
@@ -160,7 +146,7 @@ namespace GridScout2
                     {
                         if (isDisconnected)
                         {
-                            await SendDisconnectedReport(currentSystemName);
+                            await SendDisconnectedReport(currentSystemName ?? "Unknown System");
                         }
                         else
                         {
@@ -345,11 +331,11 @@ namespace GridScout2
             {
                 Message = "",
                 Scout = Character.Content.ToString() ?? "No Name",
-                System = _sigListSystemName ?? systemName ?? "Unknown System",
+                System = _sigListSystemName ?? systemName,
                 Wormhole = "Lost Connection",
                 Entries = [],
                 Disconnected = true,
-                Version = _version
+                Version = MainWindow.Version
             };
 
             await SendIfChangedOrOld(message);
@@ -383,7 +369,7 @@ namespace GridScout2
                 Wormhole = wormhole,
                 Entries = entries,
                 Disconnected = false,
-                Version = _version
+                Version = MainWindow.Version
             };
 
             await SendIfChangedOrOld(message);

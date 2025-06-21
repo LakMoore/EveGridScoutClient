@@ -1,21 +1,29 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Diagnostics;
 using System.Windows;
 using static GridScout2.Eve;
 
 
 namespace GridScout2
 {
+
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
     public partial class MainWindow : Window
     {
+        // get the oneclick version
+        private static readonly string _version = Environment.GetEnvironmentVariable("ClickOnce_CurrentVersion") ?? "2.0.0.DEV";
 
         public MainWindow()
         {
             InitializeComponent();
             Loaded += MainWindow_Loaded;
+
+            Title = $"GridScout v{MainWindow.Version}";
         }
+
+        public static string Version => _version;
 
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
