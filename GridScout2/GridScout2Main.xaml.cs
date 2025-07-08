@@ -1,8 +1,8 @@
-﻿using System;
+﻿using read_memory_64_bit;
 using System.Diagnostics;
 using System.Windows;
 using static GridScout2.Eve;
-
+using GameClient = read_memory_64_bit.GameClient;
 
 namespace GridScout2
 {
@@ -35,7 +35,7 @@ namespace GridScout2
 
             Debug.WriteLine("Starting...");
 
-            GameClientCache.LoadCache();
+            GameClientCache.LoadCache(Properties.Settings.Default.uiRootAddressCache);
 
             await Task.WhenAll(ListGameClientProcesses()
                 .Select(gc =>

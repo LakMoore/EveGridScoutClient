@@ -1,35 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using read_memory_64_bit;
 using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace GridScout2
 {
     public class Eve
     { 
 
-        public class GameClient : GameClientProcessSummaryStruct
-        {
-            public ulong? UIRootAddress;
-        }
-
-        public class GameClientProcessSummaryStruct
-        {
-            public int processId;
-
-            public required long mainWindowId;
-
-            public required string mainWindowTitle;
-
-            public int mainWindowZIndex;
-        }
-
         static Process[] GetWindowsProcessesLookingLikeEVEOnlineClient() =>
             Process.GetProcessesByName("exefile");
 
-        public static IEnumerable<GameClientProcessSummaryStruct> ListGameClientProcesses()
+        public static IEnumerable<GameClient> ListGameClientProcesses()
         {
             var allWindowHandlesInZOrder = WinApi.ListWindowHandlesInZOrder();
 
@@ -43,7 +23,7 @@ namespace GridScout2
                 GetWindowsProcessesLookingLikeEVEOnlineClient()
                 .Select(process =>
                 {
-                    return new GameClientProcessSummaryStruct
+                    return new GameClient
                     {
                         processId = process.Id,
                         mainWindowId = process.MainWindowHandle,

@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using static GridScout2.Eve;
+using GameClient = read_memory_64_bit.GameClient;
 
 namespace GridScout2
 {
@@ -100,7 +101,7 @@ namespace GridScout2
 
                     // Where are we?
                     var infoLocation = _uiRoot.InfoPanelContainer?.InfoPanelLocationInfo;
-                    var probeScanner = _uiRoot.ProbeScanner;
+                    var probeScanner = _uiRoot.ProbeScannerWindow;
 
                     string? currentSystemName = null;
 
@@ -295,14 +296,14 @@ namespace GridScout2
             }
         }
 
-        internal async Task StartAsync(GameClientProcessSummaryStruct gc, GameClient cachedGameClient)
+        internal async Task StartAsync(GameClient newGameClient, GameClient cachedGameClient)
         {
-            cachedGameClient.mainWindowTitle = gc.mainWindowTitle;
-            Character.Content = gc.mainWindowTitle.Length > 6 ? gc.mainWindowTitle.Substring(6) : gc.mainWindowTitle;
+            cachedGameClient.mainWindowTitle = newGameClient.mainWindowTitle;
+            Character.Content = newGameClient.mainWindowTitle?.Length > 6 ? newGameClient.mainWindowTitle.Substring(6) : newGameClient.mainWindowTitle;
 
             if (cachedGameClient.uiRootAddress == 0)
             { 
-                await FindUIRootAddress(gc, cachedGameClient);
+                await FindUIRootAddress(newGameClient, cachedGameClient);
             }            
 
             _gameClient = cachedGameClient;
@@ -310,18 +311,21 @@ namespace GridScout2
             DetailsPanel.Width = Double.NaN;
         }
 
-        private async Task FindUIRootAddress(GameClientProcessSummaryStruct gc, GameClient cachedGameClient)
+        private async Task FindUIRootAddress(GameClient newGameClient, GameClient cachedGameClient)
         {
             DetailsPanel.Width = 0;
             MemoryScanPanel.Width = Double.NaN;
 
-            var address = await Task.Run(() => MemoryReader.FindUIRootAddressFromProcessId(gc.processId));
+            var address = await Task.Run(() => MemoryReader.FindUIRootAddressFromProcessId(newGameClient.processId));
             if (address != null)
             {
-                cachedGameClient.mainWindowTitle = gc.mainWindowTitle;
+                cachedGameClient.mainWindowTitle = newGameClient.mainWindowTitle;
                 cachedGameClient.uiRootAddress = (ulong)address;
                 Debug.WriteLine("Got uiRoot = " + address);
-                GameClientCache.SaveCache();
+
+                Properties.Settings.Default.uiRootAddressCache = GameClientCache.SaveCache();
+                Properties.Settings.Default.Save(); // Persist the changes
+
             }
         }
 
