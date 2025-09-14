@@ -156,7 +156,7 @@ namespace GridScout2
               )
               {
                 var currentSigCodes = probeScanner.ScanResults
-                    .Select(result => result.CellsTexts?.GetValueOrDefault("ID"))
+                    .Select(result => result.ID)
                     .Where(sig => sig != null)
                     .ToList();
 
