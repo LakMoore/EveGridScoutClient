@@ -225,40 +225,41 @@ namespace GridScout2
               {
                 Wormhole.Content = wormholeCode;
                 Wormhole.Width = Double.NaN;
-
-                var isCloaked = shipUI?.ModuleButtons
-                    .Where(button => cloakIDs.Contains(button.TypeID ?? 0))
-                    .FirstOrDefault()?.IsActive == true;
-
-                if (!isCloaked)
-                {
-                  ShipStatus.Content = "NOT Cloaked!";
-                  ShipStatus.Width = Double.NaN;
-                }
-
-                var pilotCount = gridscoutOverview.Entries
-                    .Where(e =>
-                        e.ObjectType?.StartsWith("Wormhole ", StringComparison.CurrentCultureIgnoreCase) != true
-                    )
-                    .Count();
-
-                if (pilotCount == 0)
-                {
-                  Grid.Content = "No pilots on grid";
-                  Grid.Width = Double.NaN;
-                }
-                else
-                {
-                  Grid.Content = $"{pilotCount} pilot{(pilotCount > 1 ? "s" : "")} on grid";
-                  Grid.Width = Double.NaN;
-                }
-
-                if (pilotCount != lastPilotCount)
-                {
-                  lastPilotCount = pilotCount;
-                  lastPilotCountChangeTime = DateTime.Now.Ticks;
-                }
               }
+
+              var isCloaked = shipUI?.ModuleButtons
+                  .Where(button => cloakIDs.Contains(button.TypeID ?? 0))
+                  .FirstOrDefault()?.IsActive == true;
+
+              if (!isCloaked)
+              {
+                ShipStatus.Content = "NOT Cloaked!";
+                ShipStatus.Width = Double.NaN;
+              }
+
+              var pilotCount = gridscoutOverview.Entries
+                  .Where(e =>
+                      e.ObjectType?.StartsWith("Wormhole ", StringComparison.CurrentCultureIgnoreCase) != true
+                  )
+                  .Count();
+
+              if (pilotCount == 0)
+              {
+                Grid.Content = "No pilots on grid";
+                Grid.Width = Double.NaN;
+              }
+              else
+              {
+                Grid.Content = $"{pilotCount} pilot{(pilotCount > 1 ? "s" : "")} on grid";
+                Grid.Width = Double.NaN;
+              }
+
+              if (pilotCount != lastPilotCount)
+              {
+                lastPilotCount = pilotCount;
+                lastPilotCountChangeTime = DateTime.Now.Ticks;
+              }
+              
 
               // send the report
               await SendReport(gridscoutOverview, wormholeCode);
