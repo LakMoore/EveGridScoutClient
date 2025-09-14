@@ -3,37 +3,37 @@ using System.Diagnostics;
 
 namespace GridScout2
 {
-    public class Eve
-    { 
+  public class Eve
+  {
 
-        static Process[] GetWindowsProcessesLookingLikeEVEOnlineClient() =>
-            Process.GetProcessesByName("exefile");
+    static Process[] GetWindowsProcessesLookingLikeEVEOnlineClient() =>
+        Process.GetProcessesByName("exefile");
 
-        public static IEnumerable<GameClient> ListGameClientProcesses()
-        {
-            var allWindowHandlesInZOrder = WinApi.ListWindowHandlesInZOrder();
+    public static IEnumerable<GameClient> ListGameClientProcesses()
+    {
+      var allWindowHandlesInZOrder = WinApi.ListWindowHandlesInZOrder();
 
-            int? zIndexFromWindowHandle(IntPtr windowHandleToSearch) =>
-                allWindowHandlesInZOrder
-                .Select((windowHandle, index) => (windowHandle, index: (int?)index))
-                .FirstOrDefault(handleAndIndex => handleAndIndex.windowHandle == windowHandleToSearch)
-                .index;
+      int? zIndexFromWindowHandle(IntPtr windowHandleToSearch) =>
+          allWindowHandlesInZOrder
+          .Select((windowHandle, index) => (windowHandle, index: (int?)index))
+          .FirstOrDefault(handleAndIndex => handleAndIndex.windowHandle == windowHandleToSearch)
+          .index;
 
-            var processes =
-                GetWindowsProcessesLookingLikeEVEOnlineClient()
-                .Select(process =>
-                {
-                    return new GameClient
-                    {
-                        processId = process.Id,
-                        mainWindowId = process.MainWindowHandle,
-                        mainWindowTitle = process.MainWindowTitle,
-                        mainWindowZIndex = zIndexFromWindowHandle(process.MainWindowHandle) ?? 9999,
-                    };
-                });
+      var processes =
+          GetWindowsProcessesLookingLikeEVEOnlineClient()
+          .Select(process =>
+          {
+            return new GameClient
+            {
+              processId = process.Id,
+              mainWindowId = process.MainWindowHandle,
+              mainWindowTitle = process.MainWindowTitle,
+              mainWindowZIndex = zIndexFromWindowHandle(process.MainWindowHandle) ?? 9999,
+            };
+          });
 
-            return processes;
-        }
-
+      return processes;
     }
+
+  }
 }
