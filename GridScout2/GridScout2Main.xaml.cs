@@ -40,7 +40,7 @@ namespace GridScout2
       await Task.WhenAll(ListGameClientProcesses()
           .Select(gc =>
           {
-            if (gc.mainWindowTitle.Length < 7)
+            if (gc.mainWindowTitle?.Length < 7)
               return Task.CompletedTask;
 
             // make a new Scout control for each process
@@ -63,7 +63,7 @@ namespace GridScout2
         await Task.WhenAll(processes
         .Select(gc =>
         {
-          if (gc.mainWindowTitle.Length < 7)
+          if (gc.mainWindowTitle?.Length < 7)
             return Task.CompletedTask;
 
           // Do we already have a Scout control for this process?
