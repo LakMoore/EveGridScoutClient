@@ -8,11 +8,9 @@ namespace GridScout2
   internal class Server
   {
     private static string SERVER_URL =>
-        // if we are running from the IDE   
         Debugger.IsAttached
-            //? "https://ffew.space/gridscout/"
             ? "http://localhost:3000/"
-            : "https://ffew.space/gridscout/";
+            : (Properties.Settings.Default.ServerAddress ?? "https://ffew.space/gridscout/");
 
     // Send a report
     public static async Task SendReport(ScoutMessage message)

@@ -97,5 +97,17 @@ namespace GridScout2
       }
       while (true);
     }
+
+    private void OpenSettings_Click(object sender, RoutedEventArgs e)
+    {
+      var settings = new SettingsWindow();
+      settings.Owner = this;
+      settings.ShowDialog();
+    }
+
+    private void Exit_Click(object sender, RoutedEventArgs e)
+    {
+      Application.Current.Shutdown();
+    }
   }
 }

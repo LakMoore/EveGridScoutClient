@@ -5,9 +5,19 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:GridScout2"
         mc:Ignorable="d"
-        Title="GridScout2" Height="450" Width="800">
-    <Grid>
-        <StackPanel x:Name="ScoutPanel"/>
+        Title="GridScout v" Height="450" Width="800">
+    <DockPanel>
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="File">
+                <MenuItem Header="Settings" Click="OpenSettings_Click" />
+                <Separator />
+                <MenuItem Header="Exit" Click="Exit_Click" />
+            </MenuItem>
+        </Menu>
 
-    </Grid>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="ScoutPanel"/>
+        </ScrollViewer>
+
+    </DockPanel>
 </Window>
