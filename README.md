@@ -1,3 +1,8 @@
+# Archived Repository
+This project has been converted into a plugin for the Eve Commander desktop application, which can be found here: https://github.com/LakMoore/EveCommander
+
+---
+
 # Eve Grid Scout Client App
 
 WPF application to use Sanderling Memory Reading on an Eve Client window, identify a specific in-game overview and submit the content to the Eve Grid Scout web service for logging.
